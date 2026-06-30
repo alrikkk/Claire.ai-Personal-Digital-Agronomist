@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+@media print {
+  /* Hide UI navigation, headers, footers, sidebars */
+  header,
+  footer,
+  #assistant_sidebar_area,
+  #btn_toggle_dark_mode,
+  #btn_toggle_settings,
+  #btn_logout,
+  .no-print,
+  /* Hide the tab selection row */
+  .bg-white.border.border-orange-100.p-1.rounded-xl.shadow-sm {
+    display: none !important;
+  }
+
+  /* Make sure the main content fills the entire page */
+  #main_content_area {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Optimize outer body for prints */
+  body, #app_workspace {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Adjust active tab report background/padding for clean sheets */
+  .flex-1.bg-white.border.border-orange-100.p-8.rounded-3xl {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  #crop_pathology_scanner {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Keep the report fully visible and beautifully laid out */
+  #lab_diagnostics_report {
+    display: block !important;
+    page-break-inside: avoid;
+  }
+
+  .bg-white {
+    background-color: #ffffff !important;
+    border-color: #e2e8f0 !important;
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "Claire.ai",
+  "description": "An elite digital agronomist and automated plant pathology enterprise dashboard.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
