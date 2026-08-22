@@ -1,6 +1,7 @@
-<img width="43" height="39" alt="Screenshot 2026-08-22 at 6 27 16 PM" src="https://github.com/user-attachments/assets/6488fcd6-0f89-4d6d-abac-5cdeb03716b7" />
 
-# 🌾 Claire.ai — Personal Digital Agronomist
+
+# <img width="43" height="39" alt="Screenshot 2026-08-22 at 6 27 16 PM" src="https://github.com/user-attachments/assets/79da33db-20af-4276-9678-0ca942254d77" />
+ Claire.ai — Personal Digital Agronomist
 
 **Claire.ai** is an enterprise-grade digital agriculture platform that gives every farmer access to the kind of AI, satellite, and analytics tooling normally reserved for large agribusinesses — live field insights, AI crop pathology scanning, satellite/soil analytics, yield tracking, and a natural-language farming assistant, all in one dashboard.
 
