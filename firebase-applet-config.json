@@ -1,9 +1,11 @@
 {
-  "projectId": "vigilant-plating-5wjrd",
-  "appId": "1:45340676165:web:7d2b0bc91e1355b5b3532c",
-  "apiKey": "AIzaSyDHGHASXiSKBmtqEAj7egLg9bsJRPB6U1Q",
-  "authDomain": "vigilant-plating-5wjrd.firebaseapp.com",
-  "storageBucket": "vigilant-plating-5wjrd.firebasestorage.app",
-  "messagingSenderId": "45340676165",
-  "measurementId": ""
+  "projectId": "gen-lang-client-0174204380",
+  "appId": "1:907094170674:web:f40fe14f50034f9532702b",
+  "apiKey": "AIzaSyCcmTWan-1i2KzT0HPh7eQSc-mUhNQQeQI",
+  "authDomain": "gen-lang-client-0174204380.firebaseapp.com",
+  "storageBucket": "gen-lang-client-0174204380.firebasestorage.app",
+  "messagingSenderId": "907094170674",
+  "measurementId": "",
+  "oAuthClientId": "907094170674-hq62h42nm3at9ratls6m1fdq21apsl0f.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
 }

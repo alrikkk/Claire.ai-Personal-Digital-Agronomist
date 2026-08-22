@@ -1,31 +1,48 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, FileImage, ShieldAlert, Sparkles, Loader2, RefreshCw } from 'lucide-react';
+import { Upload, FileImage, ShieldAlert, Sparkles, Loader2, RefreshCw, Key } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { showToast } from '../types';
+import { showToast, ApiProviderConfig } from '../types';
+import { getSavedApiConfig, getApiConfigHeaders, API_CONFIG_CHANGED_EVENT, PROVIDER_PRESETS } from '../utils/apiConfig';
 
-// Sample leaf presets for easy demonstration
+interface CropPathologyScannerProps {
+  onOpenApiSettings?: () => void;
+}
+
+// Sample leaf presets for Indian and global agricultural crops
 const LEAF_PRESETS = [
+  {
+    name: "Rice Blast (Paddy)",
+    img: "https://images.unsplash.com/photo-1536939459926-301728717817?w=200&auto=format&fit=crop&q=80",
+    desc: "Spindle-shaped lesions with grey center on paddy foliage (Magnaporthe oryzae).",
+    mimeType: "image/jpeg"
+  },
+  {
+    name: "Cotton Leaf Curl / Bollworm",
+    img: "https://images.unsplash.com/photo-1599818816933-4f9e160a2ec7?w=200&auto=format&fit=crop&q=80",
+    desc: "Upward leaf curling, vein thickening, and flower bud rosette deformation.",
+    mimeType: "image/jpeg"
+  },
   {
     name: "Tomato Early Blight",
     img: "https://images.unsplash.com/photo-1592417817098-8f3d6eb19675?w=200&auto=format&fit=crop&q=80",
-    desc: "Specimen with brown circles and concentric ring lesions.",
+    desc: "Specimen with dark brown concentric ring lesions (Alternaria solani).",
     mimeType: "image/jpeg"
   },
   {
-    name: "Corn Common Rust",
-    img: "https://images.unsplash.com/photo-1529429617124-95b109e86bb8?w=200&auto=format&fit=crop&q=80",
-    desc: "Elongated golden-brown powdery pustules on foliage leaf surface.",
-    mimeType: "image/jpeg"
-  },
-  {
-    name: "Wheat Powdery Mildew",
+    name: "Wheat Yellow Rust",
     img: "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=200&auto=format&fit=crop&q=80",
-    desc: "Specimen detailing white-to-grey powdery fungal growth patch.",
+    desc: "Yellow-orange powdery stripe pustules along wheat leaf veins (Puccinia striiformis).",
+    mimeType: "image/jpeg"
+  },
+  {
+    name: "Groundnut Tikka Disease",
+    img: "https://images.unsplash.com/photo-1601593346740-925612772716?w=200&auto=format&fit=crop&q=80",
+    desc: "Dark brown circular necrotic spots surrounded by yellow chlorotic halo.",
     mimeType: "image/jpeg"
   }
 ];
 
-export default function CropPathologyScanner() {
+export default function CropPathologyScanner({ onOpenApiSettings }: CropPathologyScannerProps) {
   const [selectedImage, setSelectedImage] = useState<string | null>(() => {
     return sessionStorage.getItem('claireai_scanner_image');
   });
@@ -42,7 +59,17 @@ export default function CropPathologyScanner() {
   });
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+  const [apiConfig, setApiConfig] = useState<ApiProviderConfig | null>(getSavedApiConfig());
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Listen to API config updates
+  useEffect(() => {
+    const handleConfigChange = (e: any) => {
+      setApiConfig(e.detail || getSavedApiConfig());
+    };
+    window.addEventListener(API_CONFIG_CHANGED_EVENT, handleConfigChange);
+    return () => window.removeEventListener(API_CONFIG_CHANGED_EVENT, handleConfigChange);
+  }, []);
 
   // Auto-save mechanism targeting session storage
   useEffect(() => {
@@ -137,16 +164,20 @@ export default function CropPathologyScanner() {
     }
   };
 
-  // Trigger Gemini Multimodal vision pathology scan
+  // Trigger AI vision pathology scan
   const handleTriggerAnalysis = async () => {
     if (!selectedImage) return;
     setIsLoading(true);
     setErrorMsg('');
     showToast('Starting AI foliage pathology analysis...', 'info');
     try {
+      const customHeaders = getApiConfigHeaders();
       const response = await fetch('/api/scanner/analyze', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...customHeaders
+        },
         body: JSON.stringify({
           imageBase64: selectedImage,
           mimeType: imageMimeType
@@ -234,7 +265,26 @@ export default function CropPathologyScanner() {
         <h3 className="font-bold text-slate-800 flex items-center gap-2">
           <span className="text-orange-500 text-lg">🔬</span> Crop Pathology Scanner
         </h3>
-        <span className="text-[10px] bg-white border border-slate-200 px-2.5 py-1 rounded-md text-slate-500 uppercase tracking-widest font-bold">AI Vision Active</span>
+        
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={onOpenApiSettings}
+            className="flex items-center gap-1.5 bg-white hover:bg-orange-50/50 border border-orange-200 text-slate-700 px-3 py-1 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+            title="Connect or configure your own API Provider"
+          >
+            <Key className="w-3.5 h-3.5 text-orange-500" />
+            <span>
+              {apiConfig && apiConfig.isActive 
+                ? `${PROVIDER_PRESETS[apiConfig.provider]?.name || apiConfig.provider}` 
+                : 'Connect API Key'}
+            </span>
+          </button>
+
+          <span className="text-[10px] bg-white border border-slate-200 px-2.5 py-1 rounded-xl text-slate-500 uppercase tracking-widest font-bold hidden sm:inline">
+            AI Vision Active
+          </span>
+        </div>
       </div>
 
       <div className="p-8 space-y-6 flex-1 overflow-y-auto">

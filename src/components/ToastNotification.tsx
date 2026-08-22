@@ -4,40 +4,7 @@ import { CheckCircle2, AlertTriangle, XCircle, Info, X } from 'lucide-react';
 import { Toast } from '../types';
 
 export default function ToastContainer() {
-  const [toasts, setToasts] = useState<Toast[]>([]);
-
-  useEffect(() => {
-    const handleToast = (e: Event) => {
-      const customEvent = e as CustomEvent<{ message: string; type: Toast['type'] }>;
-      if (customEvent.detail) {
-        const newToast: Toast = {
-          id: Math.random().toString(36).substring(2, 9),
-          message: customEvent.detail.message,
-          type: customEvent.detail.type || 'success',
-        };
-        setToasts((prev) => [...prev, newToast]);
-      }
-    };
-
-    window.addEventListener('claire-toast', handleToast);
-    return () => {
-      window.removeEventListener('claire-toast', handleToast);
-    };
-  }, []);
-
-  const removeToast = (id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
-
-  return (
-    <div className="fixed top-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none max-w-sm w-full sm:w-[360px]">
-      <AnimatePresence>
-        {toasts.map((toast) => (
-          <ToastItem key={toast.id} toast={toast} onClose={() => removeToast(toast.id)} />
-        ))}
-      </AnimatePresence>
-    </div>
-  );
+  return null;
 }
 
 interface ToastItemProps {

@@ -1,8 +1,10 @@
 {
-  "name": "Claire.ai",
-  "description": "An elite digital agronomist and automated plant pathology enterprise dashboard.",
+  "name": "Claire.ai Agricultural Intelligence",
+  "description": "Enterprise digital agriculture platform integrated with Google Vertex AI, Gemini multimodal models, Earth Engine geospatial raster layers, BigQuery analytics, and real-time farmer agro-advisories.",
   "requestFramePermissions": [
-    "geolocation"
+    "geolocation",
+    "microphone",
+    "camera"
   ],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

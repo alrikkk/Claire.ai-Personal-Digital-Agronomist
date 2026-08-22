@@ -3,6 +3,7 @@ import { Search, Thermometer, Droplets, Compass, Sun, Cloud, CloudRain, Shield, 
 import { WeatherData, Project, showToast, User } from '../types';
 import { motion } from 'motion/react';
 import * as d3 from 'd3';
+import { OptimalPlantingAndVarieties } from './OptimalPlantingAndVarieties';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -144,9 +145,10 @@ interface LiveFieldInsightsProps {
   projects?: Project[];
   user?: User | null;
   onUpdateUser?: (updatedUser: User) => void;
+  onRefreshProjects?: () => void;
 }
 
-export default function LiveFieldInsights({ onWeatherDataFetched, activeLocation, projects = [], user, onUpdateUser }: LiveFieldInsightsProps) {
+export default function LiveFieldInsights({ onWeatherDataFetched, activeLocation, projects = [], user, onUpdateUser, onRefreshProjects }: LiveFieldInsightsProps) {
   const DEFAULT_CARD_ORDER = ['atmosphere', 'humidity', 'moisture', 'soil_temp', 'wind'];
   const [cardOrder, setCardOrder] = useState<string[]>(DEFAULT_CARD_ORDER);
   const [draggedCardIndex, setDraggedCardIndex] = useState<number | null>(null);
@@ -1704,6 +1706,20 @@ export default function LiveFieldInsights({ onWeatherDataFetched, activeLocation
               return null;
             })}
           </div>
+
+          {/* Optimal Planting Times & Crop Variety Advisory Module */}
+          <motion.div variants={itemVariants}>
+            <OptimalPlantingAndVarieties
+              weather={weather}
+              projects={projects}
+              user={user}
+              onSelectLocation={(loc) => {
+                setCitySearch(loc);
+                fetchWeather(loc);
+              }}
+              onRefreshProjects={onRefreshProjects}
+            />
+          </motion.div>
 
           {/* AI Agronomist Actionable Microclimate Tip banner */}
           <motion.div 
