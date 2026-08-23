@@ -283,7 +283,7 @@ export default function SatelliteAndSoilAnalytics({ user, weatherContext, active
             </div>
 
             <div className="flex-grow w-full h-[350px]">
-              <APIProvider apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''}>
+              <APIProvider apiKey={(import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY || ''}>
                 <Map
                   defaultCenter={{ lat: 18.5204, lng: 73.8567 }}
                   defaultZoom={15}
