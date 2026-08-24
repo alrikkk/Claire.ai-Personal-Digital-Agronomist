@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { User, Project, showToast } from '../types';
-import { Folder, Plus, Calendar, Compass, Sprout, TrendingUp, ChevronRight, Loader2, AlertCircle, Trash2, X, Download, CalendarDays, CheckSquare, Square, Clock, Sparkles, Share2, Info, BarChart2 } from 'lucide-react';
+import { Folder, Plus, Calendar, Compass, Sprout, TrendingUp, ChevronRight, Loader2, AlertCircle, Trash2, X, Download, CalendarDays, CheckSquare, Square, Clock, Sparkles, Share2, Info, BarChart2, FileSpreadsheet, Upload, Brain, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import YieldTrendsVisualization from './YieldTrendsVisualization';
+import YieldCsvImporter from './YieldCsvImporter';
+import YieldAiForecastModal from './YieldAiForecastModal';
 
 interface HistoricalYieldLogsProps {
   user: User;
@@ -136,6 +138,21 @@ export default function HistoricalYieldLogs({ user, projects, onProjectAdded, on
     { id: '4', season: '2025 Winter', crop: 'Cabbage clusters', target: '12.0 tons/ha', actual: '12.4 tons/ha', status: 'Stable', profit: '+$840' },
   ]);
   const [isSyncingLogs, setIsSyncingLogs] = useState(false);
+  const [showCsvImporterModal, setShowCsvImporterModal] = useState(false);
+  const [showInlineCsvImporter, setShowInlineCsvImporter] = useState(false);
+  const [showAiForecastModal, setShowAiForecastModal] = useState(false);
+
+  // Handle successful CSV import (append or replace)
+  const handleImportCsvSuccess = (
+    newLogs: Array<{ id?: string; season: string; crop: string; target: string; actual: string; status: string; profit: string }>,
+    mode: 'append' | 'replace'
+  ) => {
+    if (mode === 'replace') {
+      setLogs(newLogs);
+    } else {
+      setLogs((prev) => [...prev, ...newLogs]);
+    }
+  };
 
   // Fetch persisted cloud logs for current user
   useEffect(() => {
@@ -572,11 +589,27 @@ export default function HistoricalYieldLogs({ user, projects, onProjectAdded, on
     <div id="historical_yield_logs" className="-m-8 flex flex-col min-h-[480px]">
       
       {/* Bento Header Bar */}
-      <div className="p-6 border-b border-orange-50 flex items-center justify-between bg-gradient-to-r from-white to-orange-50/30 rounded-t-3xl shrink-0">
+      <div className="p-6 border-b border-orange-50 flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-white via-orange-50/20 to-purple-50/30 rounded-t-3xl shrink-0">
         <h3 className="font-bold text-slate-800 flex items-center gap-2">
-          <span className="text-orange-500 text-lg">📊</span> Historical Yield Logs
+          <span className="text-orange-500 text-lg">📊</span> Historical Yield Logs & Analytics
         </h3>
-        <span className="text-[10px] bg-white border border-slate-200 px-2.5 py-1 rounded-md text-slate-500 uppercase tracking-widest font-bold">SQL Database Sync</span>
+        
+        <div className="flex items-center gap-2.5">
+          {/* New AI Prediction Model Trigger Button */}
+          <button
+            type="button"
+            onClick={() => setShowAiForecastModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-700 hover:to-indigo-800 text-white text-xs font-extrabold shadow-sm shadow-purple-600/30 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+            title="Trigger AI prediction model based on historical yield data for next 3 harvest cycles"
+          >
+            <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+            <span>🔮 Run AI Yield Forecast (Next 3 Cycles)</span>
+          </button>
+
+          <span className="text-[10px] bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl text-slate-500 uppercase tracking-widest font-bold hidden sm:inline-block">
+            SQL Sync Active
+          </span>
+        </div>
       </div>
 
       <div className="p-8 space-y-6 flex-1 overflow-y-auto">
@@ -615,16 +648,74 @@ export default function HistoricalYieldLogs({ user, projects, onProjectAdded, on
       </div>
 
       {/* Recharts Crop Yield Trend Visualization Component */}
-      <YieldTrendsVisualization logs={logs} />
+      <YieldTrendsVisualization logs={logs} onOpenAiForecastModal={() => setShowAiForecastModal(true)} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Table of Historic Yield Records - 65% width representation in subgroup */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Structured Tabular Historical Records</span>
-            <span className="text-[10px] text-slate-400 font-mono font-medium">Auto-calculated model base ({logs.length} periods)</span>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block">Structured Tabular Historical Records</span>
+              <span className="text-[10px] text-slate-400 font-mono font-medium">Auto-calculated model base ({logs.length} periods)</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Secondary AI Forecast Trigger Button */}
+              <button
+                type="button"
+                onClick={() => setShowAiForecastModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 text-xs font-bold transition-all cursor-pointer"
+                title="Run machine learning model on historical yields"
+              >
+                <Brain className="w-3.5 h-3.5 text-purple-600" />
+                <span>AI Prediction Model</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowCsvImporterModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white text-xs font-bold shadow-sm shadow-sky-500/20 transition-all cursor-pointer"
+                title="Bulk upload historical yields from spreadsheet"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <span>Bulk Import CSV</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowInlineCsvImporter(!showInlineCsvImporter)}
+                className={`p-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                  showInlineCsvImporter
+                    ? 'bg-sky-50 border-sky-300 text-sky-700'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+                title="Toggle inline CSV dropzone"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline text-[11px]">{showInlineCsvImporter ? 'Hide Dropzone' : 'Quick Drop'}</span>
+              </button>
+            </div>
           </div>
+
+          {/* Inline CSV Dropzone / Importer (if expanded) */}
+          <AnimatePresence>
+            {showInlineCsvImporter && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <YieldCsvImporter
+                  userId={user?.id}
+                  isInline={true}
+                  onImportSuccess={handleImportCsvSuccess}
+                  onClose={() => setShowInlineCsvImporter(false)}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
           
           <div className="bg-white border border-orange-100 rounded-2xl shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
@@ -1407,6 +1498,41 @@ export default function HistoricalYieldLogs({ user, projects, onProjectAdded, on
                   </button>
                 </div>
               </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Bulk CSV Importer Modal */}
+        {showCsvImporterModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="w-full max-w-4xl max-h-[90vh] flex flex-col"
+            >
+              <YieldCsvImporter
+                userId={user?.id}
+                onImportSuccess={handleImportCsvSuccess}
+                onClose={() => setShowCsvImporterModal(false)}
+              />
+            </motion.div>
+          </div>
+        )}
+
+        {/* AI Predictive Model & 3-Cycle Forecast Modal */}
+        {showAiForecastModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="w-full max-w-5xl max-h-[92vh] flex flex-col"
+            >
+              <YieldAiForecastModal
+                logs={logs}
+                onClose={() => setShowAiForecastModal(false)}
+              />
             </motion.div>
           </div>
         )}

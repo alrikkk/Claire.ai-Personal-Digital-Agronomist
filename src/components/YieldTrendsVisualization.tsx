@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -32,7 +32,10 @@ import {
   CheckCircle2,
   AlertTriangle,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Brain,
+  Zap,
+  RefreshCw
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -49,6 +52,7 @@ export interface YieldLogDataPoint {
 interface YieldTrendsVisualizationProps {
   logs: YieldLogDataPoint[];
   onSelectCropFilter?: (crop: string) => void;
+  onOpenAiForecastModal?: () => void;
 }
 
 // Numerical extractor helper
@@ -67,17 +71,48 @@ const parseProfitValue = (profitStr: string): number => {
   return isNaN(parsed) ? 0 : parsed * (isNegative ? -1 : 1);
 };
 
-export default function YieldTrendsVisualization({ logs, onSelectCropFilter }: YieldTrendsVisualizationProps) {
+export default function YieldTrendsVisualization({ logs, onSelectCropFilter, onOpenAiForecastModal }: YieldTrendsVisualizationProps) {
   // Chart visual modes
-  const [chartMode, setChartMode] = useState<'trend' | 'variance' | 'cultivars' | 'economics'>('trend');
+  const [chartMode, setChartMode] = useState<'trend' | 'variance' | 'cultivars' | 'economics' | 'forecast'>('trend');
   const [selectedCrop, setSelectedCrop] = useState<string>('ALL');
   const [showMovingAvg, setShowMovingAvg] = useState<boolean>(true);
   const [timeRange, setTimeRange] = useState<'ALL' | 'RECENT_4' | 'RECENT_6'>('ALL');
+  
+  // Forecast inline state
+  const [inlineForecastLoading, setInlineForecastLoading] = useState<boolean>(false);
+  const [inlineForecastData, setInlineForecastData] = useState<any>(null);
 
   // Extract unique crops
   const availableCrops = useMemo(() => {
     return Array.from(new Set(logs.map((l) => l.crop))).filter(Boolean);
   }, [logs]);
+
+  // Fetch inline forecast when switching to forecast mode
+  const fetchInlineForecast = async () => {
+    if (inlineForecastLoading) return;
+    setInlineForecastLoading(true);
+    try {
+      const res = await fetch('/api/yield-logs/forecast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ logs, crop: selectedCrop, scenario: 'baseline' })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setInlineForecastData(data);
+      }
+    } catch (e) {
+      console.error('[Inline Forecast fetch error]', e);
+    } finally {
+      setInlineForecastLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (chartMode === 'forecast') {
+      fetchInlineForecast();
+    }
+  }, [chartMode, selectedCrop, logs]);
 
   // Process & filter sequential data
   const filteredLogs = useMemo(() => {
@@ -321,6 +356,104 @@ export default function YieldTrendsVisualization({ logs, onSelectCropFilter }: Y
     return null;
   };
 
+  // Forecast Recharts Dataset
+  const forecastChartData = useMemo(() => {
+    const dataPoints: any[] = [];
+    chartData.forEach((d) => {
+      dataPoints.push({
+        season: d.season,
+        crop: d.crop,
+        actual: d.actual,
+        target: d.target,
+        forecast: null,
+        lowerBound: null,
+        upperBound: null,
+        isForecast: false,
+        profitFormatted: d.profitFormatted,
+        status: d.status
+      });
+    });
+
+    if (dataPoints.length > 0 && inlineForecastData?.projections?.length) {
+      const last = dataPoints[dataPoints.length - 1];
+      last.forecast = last.actual;
+      last.lowerBound = last.actual;
+      last.upperBound = last.actual;
+    }
+
+    if (inlineForecastData?.projections) {
+      inlineForecastData.projections.forEach((p: any) => {
+        dataPoints.push({
+          season: p.season,
+          crop: p.crop,
+          actual: null,
+          target: p.targetYield,
+          forecast: p.predictedYield,
+          lowerBound: p.lowerBound,
+          upperBound: p.upperBound,
+          isForecast: true,
+          confidenceScore: p.confidenceScore,
+          profitFormatted: p.formattedProfit,
+          recommendedAction: p.recommendedAction
+        });
+      });
+    }
+
+    return dataPoints;
+  }, [chartData, inlineForecastData]);
+
+  const CustomInlineForecastTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-slate-900/95 text-white p-3.5 rounded-2xl shadow-xl border border-slate-700 text-xs space-y-2 backdrop-blur-md min-w-[220px]">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-700/80 pb-1.5">
+            <span className="font-bold text-sky-400">{data.season}</span>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+              data.isForecast ? 'bg-purple-900/80 text-purple-200 border border-purple-500/50' : 'bg-slate-800 text-slate-300'
+            }`}>
+              {data.isForecast ? '🤖 AI Forecast' : 'Historical'}
+            </span>
+          </div>
+          <div className="space-y-1 font-mono text-[11px]">
+            {data.isForecast ? (
+              <>
+                <div className="flex justify-between gap-4">
+                  <span className="text-purple-300 font-bold">Predicted Yield:</span>
+                  <span className="text-purple-300 font-extrabold text-xs">{data.forecast} t/ha</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-slate-400">95% Range:</span>
+                  <span className="text-slate-200">{data.lowerBound} &ndash; {data.upperBound} t/ha</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-slate-400">Target Goal:</span>
+                  <span className="text-amber-300">{data.target} t/ha</span>
+                </div>
+                <div className="flex justify-between gap-4 border-t border-slate-800 pt-1">
+                  <span className="text-slate-400">Net Profit:</span>
+                  <span className="text-emerald-400 font-bold">{data.profitFormatted}</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between gap-4">
+                  <span className="text-slate-400">Harvest Yield:</span>
+                  <span className="text-emerald-400 font-bold">{data.actual} t/ha</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-slate-400">Target Goal:</span>
+                  <span className="text-sky-300 font-bold">{data.target} t/ha</span>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
     <div id="recharts_yield_visualization_container" className="bg-white border border-sky-100 rounded-3xl p-6 shadow-sm space-y-6">
       
@@ -394,44 +527,67 @@ export default function YieldTrendsVisualization({ logs, onSelectCropFilter }: Y
           </div>
 
           {/* Chart Mode Switcher Buttons */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold">
+          <div className="flex flex-wrap items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold gap-1">
             <button
               type="button"
               onClick={() => setChartMode('trend')}
-              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
                 chartMode === 'trend' ? 'bg-white text-sky-600 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              Yield Timeline
+              Timeline
             </button>
             <button
               type="button"
               onClick={() => setChartMode('variance')}
-              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
                 chartMode === 'variance' ? 'bg-white text-sky-600 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              Surplus / Deficit
+              Surplus/Deficit
             </button>
             <button
               type="button"
               onClick={() => setChartMode('cultivars')}
-              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
                 chartMode === 'cultivars' ? 'bg-white text-sky-600 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              Cultivar Compare
+              Cultivars
             </button>
             <button
               type="button"
               onClick={() => setChartMode('economics')}
-              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
                 chartMode === 'economics' ? 'bg-white text-sky-600 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              Net Returns ($)
+              Returns ($)
+            </button>
+            <button
+              type="button"
+              onClick={() => setChartMode('forecast')}
+              className={`flex items-center gap-1 px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                chartMode === 'forecast'
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-xs font-extrabold'
+                  : 'text-purple-700 bg-purple-50 hover:bg-purple-100 font-bold'
+              }`}
+            >
+              <Sparkles className="w-3 h-3" />
+              <span>🔮 AI 3-Cycle Forecast</span>
             </button>
           </div>
+
+          {onOpenAiForecastModal && (
+            <button
+              type="button"
+              onClick={onOpenAiForecastModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-extrabold shadow-sm shadow-purple-600/20 transition-all cursor-pointer"
+            >
+              <Brain className="w-3.5 h-3.5" />
+              <span>AI Deep-Dive Model</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -608,6 +764,97 @@ export default function YieldTrendsVisualization({ logs, onSelectCropFilter }: Y
               <Bar dataKey="avgTarget" name="Avg Target Goal (t/ha)" fill="#cbd5e1" radius={[6, 6, 0, 0]} maxBarSize={44} />
             </BarChart>
           </ResponsiveContainer>
+        ) : chartMode === 'forecast' ? (
+          /* Mode 5: AI 3-Harvest Cycle Projected Forecast with Confidence Interval */
+          inlineForecastLoading ? (
+            <div className="h-full flex flex-col items-center justify-center space-y-3 bg-purple-50/30 rounded-2xl border border-purple-100">
+              <RefreshCw className="w-8 h-8 text-purple-600 animate-spin" />
+              <div className="text-center">
+                <p className="text-xs font-bold text-purple-900">Calculating AI Machine Learning 3-Cycle Trajectory...</p>
+                <p className="text-[11px] text-purple-600">Synthesizing regression slopes and 95% confidence intervals</p>
+              </div>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={forecastChartData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="inlineForecastAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.28} />
+                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="season" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} unit=" t/ha" />
+                <Tooltip content={<CustomInlineForecastTooltip />} />
+                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+
+                <ReferenceLine
+                  y={stats.avgYield}
+                  stroke="#94a3b8"
+                  strokeDasharray="4 4"
+                  label={{
+                    value: `Historical Avg: ${stats.avgYield} t/ha`,
+                    fill: '#64748b',
+                    fontSize: 10,
+                    position: 'insideBottomRight'
+                  }}
+                />
+
+                {/* Historical Actuals */}
+                <Line
+                  type="monotone"
+                  dataKey="actual"
+                  name="Historical Actual (t/ha)"
+                  stroke="#0284c7"
+                  strokeWidth={3}
+                  dot={{ r: 4, fill: '#0284c7' }}
+                  connectNulls={false}
+                />
+
+                {/* Target Baseline */}
+                <Line
+                  type="monotone"
+                  dataKey="target"
+                  name="Target Benchmark (t/ha)"
+                  stroke="#64748b"
+                  strokeWidth={1.5}
+                  strokeDasharray="3 3"
+                  dot={false}
+                />
+
+                {/* 95% Confidence Interval Area Band */}
+                <Area
+                  type="monotone"
+                  dataKey="upperBound"
+                  name="95% Upper CI (t/ha)"
+                  stroke="transparent"
+                  fill="url(#inlineForecastAreaGrad)"
+                  connectNulls={true}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="lowerBound"
+                  name="95% Lower CI (t/ha)"
+                  stroke="transparent"
+                  fill="#ffffff"
+                  connectNulls={true}
+                />
+
+                {/* Projected Forecast Line */}
+                <Line
+                  type="monotone"
+                  dataKey="forecast"
+                  name="🔮 AI Projected 3-Cycle Forecast (t/ha)"
+                  stroke="#8b5cf6"
+                  strokeWidth={3.5}
+                  strokeDasharray="5 5"
+                  dot={{ r: 5, fill: '#7c3aed', stroke: '#fff', strokeWidth: 2 }}
+                  connectNulls={true}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          )
         ) : (
           /* Mode 4: Net Economic Returns */
           <ResponsiveContainer width="100%" height="100%">
