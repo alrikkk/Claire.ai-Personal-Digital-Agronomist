@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Wind } from 'lucide-react';
 
 interface InteractiveCropFieldBackgroundProps {
   className?: string;
@@ -40,7 +39,7 @@ export default function InteractiveCropFieldBackground({
 
   // Field crop variety selector
   const [cropTheme, setCropTheme] = useState<'golden_wheat' | 'amber_barley' | 'emerald_paddy'>('golden_wheat');
-  const [windBoost, setWindBoost] = useState(1);
+  const [windBoost, setWindBoost] = useState(3.0); // Default to 3x breeze / gale dynamics
 
   // Sky transition progress tracking (0 = regular canopy, 1 = camera pointed straight up into glowing sky)
   const skyProgressRef = useRef(0);
@@ -516,63 +515,6 @@ export default function InteractiveCropFieldBackground({
         ref={canvasRef}
         className="w-full h-full block cursor-crosshair touch-none"
       />
-
-      {/* Floating Interactive Field Control Dock (Bottom Left) */}
-      <div className={`absolute bottom-4 left-4 z-20 hidden sm:flex items-center gap-2 bg-slate-950/70 backdrop-blur-md border border-white/15 px-3 py-1.5 rounded-2xl shadow-xl text-white text-[11px] transition-all duration-500 ${
-        isTransitioningToSky ? 'opacity-0 pointer-events-none translate-y-4' : 'opacity-100 translate-y-0'
-      }`}>
-        <div className="flex items-center gap-1.5 pr-2 border-r border-white/15 font-semibold text-amber-300">
-          <Wind className="w-3.5 h-3.5 animate-spin" style={{ animationDuration: '6s' }} />
-          <span>Interactive Drone Canopy</span>
-        </div>
-
-        {/* Variety Selector */}
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setCropTheme('golden_wheat')}
-            className={`px-2 py-0.5 rounded-lg font-medium transition-all cursor-pointer ${
-              cropTheme === 'golden_wheat' ? 'bg-amber-500 text-white shadow-xs' : 'text-slate-300 hover:text-white hover:bg-white/10'
-            }`}
-            title="Golden Wheat (Triticum aestivum)"
-          >
-            🌾 Wheat
-          </button>
-          <button
-            type="button"
-            onClick={() => setCropTheme('amber_barley')}
-            className={`px-2 py-0.5 rounded-lg font-medium transition-all cursor-pointer ${
-              cropTheme === 'amber_barley' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-300 hover:text-white hover:bg-white/10'
-            }`}
-            title="Amber Barley (Hordeum vulgare)"
-          >
-            🌿 Barley
-          </button>
-          <button
-            type="button"
-            onClick={() => setCropTheme('emerald_paddy')}
-            className={`px-2 py-0.5 rounded-lg font-medium transition-all cursor-pointer ${
-              cropTheme === 'emerald_paddy' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-300 hover:text-white hover:bg-white/10'
-            }`}
-            title="Emerald Paddy (Oryza sativa)"
-          >
-            🌱 Paddy
-          </button>
-        </div>
-
-        {/* Wind Gust Velocity Controller */}
-        <div className="flex items-center gap-1 pl-2 border-l border-white/15">
-          <span className="text-[10px] text-slate-400">Wind:</span>
-          <button
-            type="button"
-            onClick={() => setWindBoost((prev) => (prev === 1 ? 1.5 : prev === 1.5 ? 2.0 : 1))}
-            className="px-1.5 py-0.5 rounded bg-white/10 hover:bg-white/20 text-amber-300 font-mono text-[10px] cursor-pointer"
-            title="Toggle wind velocity"
-          >
-            {windBoost === 1 ? '1x Breeze' : windBoost === 1.5 ? '2x Gust' : '3x Gale'}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
