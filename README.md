@@ -2,7 +2,7 @@
 
 # Claire.ai — Personal Digital Agronomist
 
-BUILT AS A GOOGLE FOR DEV PROMPTWARS 2026 , SHIFTING..
+BUILT AS A GOOGLE FOR DEV PROMPTWARS HACKATHON 2026 SUBMISSION , SHIFTING..
 
 ** Undergoing an update , but the current link is the previous version. So,feel free to try it out.
 
