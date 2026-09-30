@@ -1132,7 +1132,7 @@ app.get('/api/weather', async (req, res) => {
     const location = geoData.results[0];
     const { latitude, longitude, name, country, admin1 } = location;
 
-    const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&hourly=soil_temperature_0_to_10cm,soil_moisture_0_to_1cm&forecast_days=1`;
+    const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m&hourly=soil_temperature_0_to_10cm,soil_moisture_0_to_1cm&forecast_days=1`;
     const forecastResponse = await fetch(forecastUrl);
     if (!forecastResponse.ok) {
       throw new Error(`Forecast server returned status ${forecastResponse.status}`);
@@ -1145,7 +1145,14 @@ app.get('/api/weather', async (req, res) => {
     const currentTemp = current?.temperature_2m ?? 24.5;
     const currentHumidity = current?.relative_humidity_2m ?? 65;
     const windSpeed = current?.wind_speed_10m ?? 8.2;
+    const rawWindDirection = current?.wind_direction_10m ?? 45;
+    const windDirection = Math.round(((rawWindDirection % 360) + 360) % 360);
+    const windGusts = parseFloat((current?.wind_gusts_10m ?? (windSpeed * 1.35)).toFixed(1));
     const weatherCode = current?.weather_code ?? 0;
+
+    const compassPoints = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+    const compassIndex = Math.round(windDirection / 22.5) % 16;
+    const windDirectionCompass = compassPoints[compassIndex];
 
     const soilTemp = hourly?.soil_temperature_0_to_10cm ? (hourly.soil_temperature_0_to_10cm.reduce((a: number, b: number) => a + b, 0) / hourly.soil_temperature_0_to_10cm.length) : 21.2;
     const soilMoisture = hourly?.soil_moisture_0_to_1cm ? (hourly.soil_moisture_0_to_1cm.reduce((a: number, b: number) => a + b, 0) / hourly.soil_moisture_0_to_1cm.length) : 0.28;
@@ -1166,6 +1173,9 @@ app.get('/api/weather', async (req, res) => {
       temp: parseFloat(currentTemp.toFixed(1)),
       humidity: Math.round(currentHumidity),
       windSpeed: parseFloat(windSpeed.toFixed(1)),
+      windDirection,
+      windDirectionCompass,
+      windGusts,
       soilTemp: parseFloat(soilTemp.toFixed(1)),
       soilMoisture: parseFloat((soilMoisture * 100).toFixed(1)),
       dayType
@@ -1189,6 +1199,9 @@ app.get('/api/weather', async (req, res) => {
       temp: 24.2,
       humidity: 58,
       windSpeed: 10.5,
+      windDirection: 65,
+      windDirectionCompass: 'ENE',
+      windGusts: 14.8,
       soilTemp: 22.1,
       soilMoisture: 32.4,
       dayType: 'Sunny',

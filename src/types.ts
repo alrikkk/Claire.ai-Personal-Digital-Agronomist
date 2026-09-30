@@ -43,6 +43,11 @@ export interface WeatherData {
   temp: number;
   humidity: number;
   windSpeed: number;
+  windDirection?: number; // 0-360 degrees
+  windDirectionCompass?: string; // N, NE, ENE, etc.
+  windGusts?: number; // km/h
+  beaufortScale?: string; // e.g. "Gentle Breeze"
+  beaufortForce?: number; // 0-12
   soilTemp: number;
   soilMoisture: number;
   dayType: string; // Sunny | Cloudy | Rainy

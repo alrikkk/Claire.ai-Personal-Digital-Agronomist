@@ -4,6 +4,7 @@ import { WeatherData, Project, showToast, User } from '../types';
 import { motion } from 'motion/react';
 import * as d3 from 'd3';
 import { OptimalPlantingAndVarieties } from './OptimalPlantingAndVarieties';
+import WindDirectionIndicator from './WindDirectionIndicator';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -461,9 +462,13 @@ export default function LiveFieldInsights({ onWeatherDataFetched, activeLocation
 
   // Helper to get microclimate condition warning/reassurance
   const getAgronomyAdvice = (data: WeatherData) => {
-    const { temp, humidity, soilMoisture, dayType } = data;
+    const { temp, humidity, soilMoisture, dayType, windSpeed, windDirectionCompass } = data;
     if (dayType === 'Rainy') {
       return "Active precipitation detected. Halt scheduling sprinkler irrigation to prevent leaf rot and fungal spore dispersal.";
+    }
+    if (windSpeed > 18) {
+      const dirText = windDirectionCompass ? ` blowing from ${windDirectionCompass}` : '';
+      return `Elevated canopy wind velocity (${windSpeed} km/h${dirText}). Suspend chemical foliar spraying due to droplet drift hazard. Monitor downwind crop rows for moisture loss.`;
     }
     if (temp > 30) {
       return "High ambient temperature. Switch to early drip cycles and inspect crop margins for transpiration wilt.";
@@ -650,8 +655,9 @@ export default function LiveFieldInsights({ onWeatherDataFetched, activeLocation
                 </select>
               </div>
               {weather && (
-                <div className="text-xs text-slate-600 font-sans">
-                  <span className="font-bold">{weather.name}</span> • Lat: {weather.latitude.toFixed(2)}° • {weather.dayType} Day
+                <div className="text-xs text-slate-600 font-sans flex items-center justify-between gap-2">
+                  <span><span className="font-bold">{weather.name}</span> • Lat: {weather.latitude.toFixed(2)}° • {weather.dayType} Day</span>
+                  <WindDirectionIndicator size="mini" windSpeed={weather.windSpeed} windDirection={weather.windDirection} cityName={weather.name} />
                 </div>
               )}
             </div>
@@ -713,8 +719,9 @@ export default function LiveFieldInsights({ onWeatherDataFetched, activeLocation
                 </button>
               </div>
               {secondaryWeather && (
-                <div className="text-xs text-slate-600 font-sans">
-                  <span className="font-bold">{secondaryWeather.name}</span> • Lat: {secondaryWeather.latitude.toFixed(2)}° • {secondaryWeather.dayType} Day
+                <div className="text-xs text-slate-600 font-sans flex items-center justify-between gap-2">
+                  <span><span className="font-bold">{secondaryWeather.name}</span> • Lat: {secondaryWeather.latitude.toFixed(2)}° • {secondaryWeather.dayType} Day</span>
+                  <WindDirectionIndicator size="mini" windSpeed={secondaryWeather.windSpeed} windDirection={secondaryWeather.windDirection} cityName={secondaryWeather.name} />
                 </div>
               )}
             </div>
@@ -926,36 +933,48 @@ export default function LiveFieldInsights({ onWeatherDataFetched, activeLocation
                     </p>
                   </div>
 
-                  {/* 5. Wind Velocity Comparison */}
+                  {/* 5. Wind Velocity & Direction Comparison */}
                   <div className="p-4 rounded-2xl border border-slate-100 bg-slate-50/30 space-y-4">
                     <div className="flex justify-between items-center">
                       <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                        💨 Wind Speed
+                        💨 Wind & Heading
                       </span>
                       <span className="text-[10px] font-mono font-bold text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded">
                         Diff: {Math.abs(weather.windSpeed - secondaryWeather.windSpeed).toFixed(1)} km/h
                       </span>
                     </div>
 
-                    <div className="space-y-3">
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-xs font-medium">
-                          <span className="text-slate-500 truncate max-w-[140px]">A: {weather.name}</span>
-                          <span className="font-bold text-slate-800">{weather.windSpeed} km/h</span>
+                    <div className="space-y-2.5">
+                      {/* Field A Wind Direction & Velocity */}
+                      <div>
+                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center justify-between">
+                          <span>Field A ({weather.name})</span>
+                          <span className="font-mono text-sky-700 font-bold">{weather.windSpeed} km/h</span>
                         </div>
-                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-sky-500 rounded-full" style={{ width: `${Math.min(100, (weather.windSpeed / 60) * 100)}%` }} />
-                        </div>
+                        <WindDirectionIndicator
+                          size="compact"
+                          windSpeed={weather.windSpeed}
+                          windDirection={weather.windDirection}
+                          windGusts={weather.windGusts}
+                          cityName={weather.name}
+                          showDetails={false}
+                        />
                       </div>
 
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-xs font-medium">
-                          <span className="text-slate-500 truncate max-w-[140px]">B: {secondaryWeather.name}</span>
-                          <span className="font-bold text-emerald-600">{secondaryWeather.windSpeed} km/h</span>
+                      {/* Field B Wind Direction & Velocity */}
+                      <div>
+                        <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-1 flex items-center justify-between">
+                          <span>Field B ({secondaryWeather.name})</span>
+                          <span className="font-mono text-emerald-700 font-bold">{secondaryWeather.windSpeed} km/h</span>
                         </div>
-                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.min(100, (secondaryWeather.windSpeed / 60) * 100)}%` }} />
-                        </div>
+                        <WindDirectionIndicator
+                          size="compact"
+                          windSpeed={secondaryWeather.windSpeed}
+                          windDirection={secondaryWeather.windDirection}
+                          windGusts={secondaryWeather.windGusts}
+                          cityName={secondaryWeather.name}
+                          showDetails={false}
+                        />
                       </div>
                     </div>
 
@@ -1690,14 +1709,25 @@ export default function LiveFieldInsights({ onWeatherDataFetched, activeLocation
                         <Sparkline data={generateTrend(weather.windSpeed, weather.name + 'wind', 6)} color="#0EA5E9" width={110} height={26} />
                       </div>
                     </div>
-                    <div className="flex items-end justify-between mt-2">
-                      <div>
-                        <p className="text-2xl font-extrabold text-slate-800 tracking-tight">{weather.windSpeed} km/h</p>
-                        <p className="text-[10px] text-slate-400 font-semibold mt-1">
-                          {weather.isFallback ? 'Simulated Station' : 'Active Weather Geo-Engine'}
-                        </p>
-                      </div>
-                      <div className="text-xl p-2.5 bg-sky-50 rounded-xl text-sky-500">💨</div>
+
+                    {/* Dynamic Real-Time Rotating Wind Direction Compass & Indicator */}
+                    <div className="mt-2">
+                      <WindDirectionIndicator
+                        windSpeed={weather.windSpeed}
+                        windDirection={weather.windDirection}
+                        windGusts={weather.windGusts}
+                        cityName={weather.name}
+                        size="standard"
+                        showDetails={true}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100 text-[10px] text-slate-400 font-medium">
+                      <span>{weather.isFallback ? 'Simulated Station Telemetry' : 'Active Weather Geo-Engine'}</span>
+                      <span className="text-sky-600 font-semibold flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
+                        Station Telemetry: Live
+                      </span>
                     </div>
                   </motion.div>
                 );
