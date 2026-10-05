@@ -54,6 +54,24 @@ export interface WeatherData {
   isFallback?: boolean;
 }
 
+export interface DailyAgronomyTip {
+  id: string;
+  title: string;
+  category: 'planting' | 'pest_prevention' | 'soil_water';
+  categoryLabel: string;
+  seasonTag: string;
+  priority: 'high' | 'medium' | 'info';
+  summary: string;
+  immediateAction: string;
+  pestAlert?: string;
+  lowCostRemedy?: string;
+  companionCrops?: string[];
+  climateNote?: string;
+  locationName: string;
+  generatedAt: string;
+  isCached?: boolean;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';

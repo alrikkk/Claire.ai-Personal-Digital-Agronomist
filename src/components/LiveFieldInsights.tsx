@@ -5,6 +5,7 @@ import { motion } from 'motion/react';
 import * as d3 from 'd3';
 import { OptimalPlantingAndVarieties } from './OptimalPlantingAndVarieties';
 import WindDirectionIndicator from './WindDirectionIndicator';
+import DailyAgronomyTipBanner from './DailyAgronomyTipBanner';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -1195,6 +1196,14 @@ export default function LiveFieldInsights({ onWeatherDataFetched, activeLocation
               animation: leafFloat 3.5s ease-in-out infinite;
             }
           ` }} />
+
+          {/* Contextual Daily Agronomy Tip Banner (Location & Season Aware) */}
+          <motion.div variants={itemVariants}>
+            <DailyAgronomyTipBanner
+              weather={weather}
+              activeLocation={citySearch || weather.name}
+            />
+          </motion.div>
 
           {/* Dynamic Crop Maturity Progress and Growth Card */}
           <motion.div 

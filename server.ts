@@ -1236,7 +1236,230 @@ app.get('/api/reverse-geocode', async (req, res) => {
   }
 });
 
-// Helper to extract & sanitize custom API credentials
+// 9.6 Daily Agronomy Tip Engine (Location-Aware Seasonal Planting & Pest Prevention)
+const dailyTipCache: Record<string, { timestamp: number; data: any }> = {};
+const DAILY_TIP_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+app.all(['/api/agronomy/daily-tip'], async (req: Request, res: Response) => {
+  const body = req.method === 'POST' ? req.body : req.query;
+  const location = (body.location as string || body.city as string || 'Nairobi').trim().slice(0, 100);
+  const category = (body.category as string || 'all').toLowerCase();
+  const forceRefresh = body.forceRefresh === true || body.forceRefresh === 'true';
+  const weather = typeof body.weather === 'object' && body.weather !== null ? body.weather : null;
+  const country = (body.country as string || '').slice(0, 60);
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const cacheKey = `${location.toLowerCase()}_${category}_${todayStr}`;
+  const now = Date.now();
+
+  if (!forceRefresh && dailyTipCache[cacheKey] && (now - dailyTipCache[cacheKey].timestamp < DAILY_TIP_CACHE_TTL_MS)) {
+    return res.json({ success: true, ...dailyTipCache[cacheKey].data, isCached: true });
+  }
+
+  // Fallback generator based on location heuristics, hemisphere and weather
+  const getFallbackTip = (loc: string, cat: string, w: any) => {
+    const lower = loc.toLowerCase();
+    const isAfrica = lower.includes('nairobi') || lower.includes('kenya') || lower.includes('nakuru') || lower.includes('eldoret') || lower.includes('mombasa') || lower.includes('kisumu') || lower.includes('uganda') || lower.includes('tanzania') || lower.includes('rwanda') || lower.includes('lagos') || lower.includes('accra') || lower.includes('africa');
+    const isIndia = lower.includes('india') || lower.includes('delhi') || lower.includes('punjab') || lower.includes('mumbai') || lower.includes('bengaluru') || lower.includes('nagpur') || lower.includes('jaipur') || lower.includes('haryana') || lower.includes('bihar');
+    const isNorthAmerica = lower.includes('california') || lower.includes('fresno') || lower.includes('texas') || lower.includes('iowa') || lower.includes('florida') || lower.includes('ohio') || lower.includes('salinas') || lower.includes('kansas') || lower.includes('usa') || lower.includes('canada');
+
+    if (cat === 'pest_prevention' || (cat === 'all' && Math.random() > 0.5)) {
+      if (isAfrica) {
+        return {
+          id: `tip-pest-${Date.now()}`,
+          title: "🛡️ Fall Armyworm & Stem Borer Proactive Scout Alert",
+          category: 'pest_prevention',
+          categoryLabel: '🛡️ Pest & Disease Prevention',
+          seasonTag: "October Short Rains Emergence Window",
+          priority: 'high',
+          summary: `As seasonal short rains arrive in ${loc}, ambient humidity and seedling flush trigger rapid Fall Armyworm (Spodoptera frugiperda) and stalk borer moth egg-laying on young leaf funnels.`,
+          immediateAction: "Inspect 20 random plants per acre twice weekly. Check whorls for pinhole feeding windows and sawdust-like frass.",
+          pestAlert: "Fall Armyworm (FAW) egg masses beneath leaves; early instar larvae within central whorl funnel.",
+          lowCostRemedy: "Apply fine wood ash or dry sand blended with chilli powder (1:10 ratio) directly into leaf whorls, or spray 5% neem seed kernel extract (NSKE).",
+          companionCrops: ["Silverleaf Desmodium (Push)", "Napier Grass (Pull)", "Cowpeas (Ground Cover)"],
+          climateNote: "Warm temperatures (>22°C) accelerate caterpillar development cycle to under 24 days.",
+          locationName: loc,
+          generatedAt: new Date().toISOString()
+        };
+      } else if (isIndia) {
+        return {
+          id: `tip-pest-${Date.now()}`,
+          title: "🛡️ Rabi Season Pod Borer & Whitefly Early Warning",
+          category: 'pest_prevention',
+          categoryLabel: '🛡️ Pest & Disease Prevention',
+          seasonTag: "Post-Monsoon Rabi Pest Management",
+          priority: 'high',
+          summary: `Transition to cooler post-monsoon weather in ${loc} creates high reproductive pressure for Helicoverpa armigera (gram pod borer) and whitefly vectors transmitting yellow mosaic virus.`,
+          immediateAction: "Erect 5-8 pheromone traps per hectare at crop canopy level to monitor adult male moth flight surges.",
+          pestAlert: "Helicoverpa armigera pod borer eggs and early nymphs on chickpea and pulse foliage.",
+          lowCostRemedy: "Install bird perches (T-shaped bamboo stakes, 20/acre) and spray HaNPV (Helicoverpa nuclear polyhedrosis virus) at 250 LE/ha.",
+          companionCrops: ["Coriander Intercrop", "Marigold Border Trap", "Mustard Guard Rows"],
+          climateNote: "Cool nights combined with warm sunny days favor rapid whitefly multiplication.",
+          locationName: loc,
+          generatedAt: new Date().toISOString()
+        };
+      } else {
+        return {
+          id: `tip-pest-${Date.now()}`,
+          title: "🛡️ Autumn Crop Sanitation & Overwintering Pest Defense",
+          category: 'pest_prevention',
+          categoryLabel: '🛡️ Pest & Disease Prevention',
+          seasonTag: "Fall Post-Harvest Sanitization Window",
+          priority: 'medium',
+          summary: `In ${loc}, cooling seasonal temperatures signal soil-dwelling beetles, root maggots, and fungal spores (e.g. Fusarium and Rhizoctonia) to seek refuge in crop residue.`,
+          immediateAction: "Remove and hot-compost diseased plant refuse or deep-till harvest leftovers 15cm down to expose pupae to predatory ground birds and night frost.",
+          pestAlert: "Overwintering stink bug adults, squash bug aggregations, and brassica flea beetles.",
+          lowCostRemedy: "Apply beneficial nematodes (Steinernema carpocapsae) to moist soil before temperatures drop below 10°C to parasitize grubs.",
+          companionCrops: ["Winter Rye Cover", "Hairy Vetch", "Crimson Clover"],
+          climateNote: "Decreasing day length slows plant natural immunity; avoid late heavy nitrogen fertilizing.",
+          locationName: loc,
+          generatedAt: new Date().toISOString()
+        };
+      }
+    }
+
+    // Default to Seasonal Planting
+    if (isAfrica) {
+      return {
+        id: `tip-plant-${Date.now()}`,
+        title: "🌱 October Short-Rains Legume & Drought-Shield Sowing",
+        category: 'planting',
+        categoryLabel: '🌱 Seasonal Planting & Sowing',
+        seasonTag: "Short Rains Sowing Phase (Oct - Dec)",
+        priority: 'high',
+        summary: `The optimal planting window for ${loc} is now open with the onset of the short rains. Prioritize fast-maturing legumes (pigeon peas, beans, green grams) intercropped with certified short-season maize.`,
+        immediateAction: "Seed inoculate legumes with Rhizobium biofertilizer and sow immediately when topsoil is moist to 10cm depth.",
+        pestAlert: "Watch for early bean fly (Ophiomyia) oviposition punctures on cotyledons; earth up soil around stems.",
+        lowCostRemedy: "Coat seeds with neem oil or wood ash before planting to deter soil cutworms and termites.",
+        companionCrops: ["Nyayo Dry Beans", "Green Grams (KS20)", "Drought-Shield Maize (DKC 90-89)"],
+        climateNote: "Current soil moisture and temperature provide ideal germination conditions within 4-6 days.",
+        locationName: loc,
+        generatedAt: new Date().toISOString()
+      };
+    } else if (isIndia) {
+      return {
+        id: `tip-plant-${Date.now()}`,
+        title: "🌱 Rabi Season Pulse & Mustard Precision Sowing",
+        category: 'planting',
+        categoryLabel: '🌱 Seasonal Planting & Sowing',
+        seasonTag: "Rabi Sowing Calendar",
+        priority: 'high',
+        summary: `Take strategic advantage of residual monsoon soil moisture in ${loc} to sow chickpea (Desi/Kabuli), mustard, and wheat before topsoil dries out.`,
+        immediateAction: "Perform seed priming (soaking in water for 6 hours followed by shade drying) to accelerate uniform emergence.",
+        pestAlert: "Termite damage in dry sandy soils; monitor root collars of emerging seedlings.",
+        lowCostRemedy: "Mix Trichoderma viride (5g/kg seed) to guard against collar rot and wilt pathogens.",
+        companionCrops: ["Chickpea (JG 11)", "Yellow Mustard (Pusa Bold)", "Wheat (HD 2967)"],
+        climateNote: "Sowing at 20-25°C ambient temperatures optimizes early root elongation.",
+        locationName: loc,
+        generatedAt: new Date().toISOString()
+      };
+    } else {
+      return {
+        id: `tip-plant-${Date.now()}`,
+        title: "🌱 Fall Cold-Hardy Planting & Cover Crop Seeding",
+        category: 'planting',
+        categoryLabel: '🌱 Seasonal Planting & Sowing',
+        seasonTag: "Autumn Planting & Soil Cover Window",
+        priority: 'medium',
+        summary: `For agricultural zones around ${loc}, now is the peak window to drill winter grains, garlic cloves, and winter brassicas that benefit from autumn root establishment.`,
+        immediateAction: "Sow cold-tolerant cover crops like crimson clover or hairy vetch to fix up to 80 lbs of biological nitrogen per acre over winter.",
+        pestAlert: "Damping-off fungi in cool, damp autumn beds; avoid over-irrigating dense seedbeds.",
+        lowCostRemedy: "Dust crushed biochar or compost tea along seed furrows to inoculate with beneficial aerobic microbes.",
+        companionCrops: ["Hardneck Garlic", "Winter Rye", "Tillage Radish (Bio-drill)"],
+        climateNote: "Cool weather sweetens brassicas by converting starches into natural plant sugars.",
+        locationName: loc,
+        generatedAt: new Date().toISOString()
+      };
+    }
+  };
+
+  try {
+    const currentMonthName = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(new Date());
+    const weatherSummary = weather 
+      ? `Current Weather: Temp ${weather.temp}°C, Humidity ${weather.humidity}%, Wind ${weather.windSpeed} km/h ${weather.windDirectionCompass || ''}, Condition: ${weather.dayType || 'Clear'}.`
+      : `Current Season: ${currentMonthName}.`;
+
+    const prompt = `You are Claire.ai's Lead Agronomist. Provide a highly contextual "Daily Agronomy Tip" for a farmer in:
+Location: ${location} ${country ? `(${country})` : ''}
+Current Date/Month: ${currentMonthName} 2026
+Requested Category: ${category} (can be 'planting', 'pest_prevention', 'soil_water', or 'all')
+${weatherSummary}
+
+INSTRUCTIONS:
+1. Provide actionable, season-specific agricultural intelligence matching this hemisphere, climate zone, and calendar month.
+2. Focus on either seasonal planting/sowing windows OR proactive integrated pest management (IPM) & disease prevention.
+3. Include specific low-cost organic/biological remedies (e.g. neem extract, wood ash, companion plants, biofertilizers, sticky traps).
+4. Return ONLY valid JSON (no markdown fences, no extra preamble) matching this schema:
+{
+  "title": "Short catchy title with emoji (e.g. 🌱 October Sowing Protocol...)",
+  "category": "planting" | "pest_prevention" | "soil_water",
+  "categoryLabel": "🌱 Seasonal Planting & Sowing" | "🛡️ Pest & Disease Prevention" | "💧 Soil & Water Stewardship",
+  "seasonTag": "Specific Seasonal Period (e.g. Short Rains Sowing Phase / Mid-Autumn Seeding)",
+  "priority": "high" | "medium" | "info",
+  "summary": "2-3 crisp sentences explaining the biological context and seasonal opportunity/risk for this region.",
+  "immediateAction": "1 clear, step-by-step field task the farmer can execute today.",
+  "pestAlert": "Specific pest or disease to inspect or guard against right now.",
+  "lowCostRemedy": "A low-cost, natural, or accessible remediation or prevention method.",
+  "companionCrops": ["Crop 1", "Crop 2", "Crop 3"],
+  "climateNote": "Brief observation on how current temperature/moisture affects this protocol."
+}`;
+
+    const response = await getGenAIClient().models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json'
+      }
+    });
+
+    const text = response.text || '';
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(text);
+    } catch (e) {
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) {
+        parsed = JSON.parse(match[0]);
+      }
+    }
+
+    if (parsed && parsed.title && parsed.summary) {
+      const tipData = {
+        id: `tip-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        title: parsed.title,
+        category: parsed.category || category,
+        categoryLabel: parsed.categoryLabel || (parsed.category === 'pest_prevention' ? '🛡️ Pest & Disease Prevention' : '🌱 Seasonal Planting & Sowing'),
+        seasonTag: parsed.seasonTag || `${currentMonthName} Agricultural Phase`,
+        priority: parsed.priority || 'high',
+        summary: parsed.summary,
+        immediateAction: parsed.immediateAction || 'Check seedbeds and inspect crop margins for moisture retention.',
+        pestAlert: parsed.pestAlert || 'Monitor lower leaf surfaces for early aphid and mite colonies.',
+        lowCostRemedy: parsed.lowCostRemedy || 'Spray diluted neem seed oil (5ml/L water) with a few drops of mild soap.',
+        companionCrops: Array.isArray(parsed.companionCrops) ? parsed.companionCrops : ['Beans', 'Cowpeas', 'Maize'],
+        climateNote: parsed.climateNote || 'Optimal microclimate conditions active for field work.',
+        locationName: location,
+        generatedAt: new Date().toISOString()
+      };
+
+      dailyTipCache[cacheKey] = {
+        timestamp: now,
+        data: tipData
+      };
+
+      return res.json({ success: true, ...tipData, isCached: false });
+    } else {
+      throw new Error("Invalid model JSON structure");
+    }
+
+  } catch (err: any) {
+    const fallback = getFallbackTip(location, category, weather);
+    dailyTipCache[cacheKey] = {
+      timestamp: now,
+      data: fallback
+    };
+    return res.json({ success: true, ...fallback, isCached: false, isFallback: true });
+  }
+});
 function getCustomApiConfig(req: express.Request) {
   const provider = (req.headers['x-custom-api-provider'] as string) || req.body?.customProvider || '';
   const rawApiKey = (req.headers['x-custom-api-key'] as string) || req.body?.customApiKey || '';
