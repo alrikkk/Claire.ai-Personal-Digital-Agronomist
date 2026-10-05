@@ -281,3 +281,42 @@ export function showToast(message: string, type: 'success' | 'info' | 'error' | 
   window.dispatchEvent(new CustomEvent('claire-toast', { detail: { message, type } }));
 }
 
+export interface IrrigationZone {
+  id: string;
+  name: string;
+  fieldQuadrant: string;
+  cropType: string;
+  method: 'Drip' | 'Micro-Sprinkler' | 'Subsurface Drip' | 'Center Pivot';
+  valveStatus: 'idle' | 'watering' | 'paused' | 'scheduled';
+  flowRateLitersPerMin: number;
+  currentMoisture: number;
+  targetMoisture: number;
+  activeRun?: {
+    startedAt: number;
+    durationMinutes: number;
+    remainingSeconds: number;
+    litersDelivered: number;
+  };
+  lastWatered?: string;
+  weeklyLitersUsed: number;
+}
+
+export interface IrrigationSchedule {
+  id: string;
+  name: string;
+  zoneIds: string[];
+  startTime: string;
+  durationMinutes: number;
+  daysOfWeek: number[]; // 0 = Sun, 1 = Mon, etc.
+  enabled: boolean;
+  smartSkipConditions: {
+    skipOnRain: boolean;
+    rainThresholdPct: number;
+    skipOnHighMoisture: boolean;
+    moistureThresholdPct: number;
+    skipOnHighWind: boolean;
+    windThresholdKmH: number;
+  };
+  nextRun?: string;
+}
+

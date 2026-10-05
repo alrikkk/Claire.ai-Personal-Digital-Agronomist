@@ -35,6 +35,7 @@ import {
   showToast 
 } from '../types';
 import { APIProvider, Map } from '@vis.gl/react-google-maps';
+import SoilQualityHeatmapVisualization from './SoilQualityHeatmapVisualization';
 
 interface SatelliteAndSoilAnalyticsProps {
   user: User;
@@ -529,6 +530,14 @@ export default function SatelliteAndSoilAnalytics({ user, weatherContext, active
           </div>
         </div>
       </div>
+
+      {/* SECTION: D3-BASED HISTORICAL SOIL QUALITY INDEX (SQI) HEATMAP */}
+      <SoilQualityHeatmapVisualization
+        nitrogen={nitrogen}
+        soc={soc}
+        ph={ph}
+        activeLocation={activeLocation || user.farmName || 'Primary Farm Zone'}
+      />
 
       {/* SECTION 3: MULTI-LINGUAL AI AGRO-ADVISORY WITH AUDIO PLAYBACK */}
       <div className="bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">

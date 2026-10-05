@@ -7,6 +7,7 @@ import { OptimalPlantingAndVarieties } from './OptimalPlantingAndVarieties';
 import WindDirectionIndicator from './WindDirectionIndicator';
 import DailyAgronomyTipBanner from './DailyAgronomyTipBanner';
 import GrowthCycleYieldProjectionChart from './GrowthCycleYieldProjectionChart';
+import SmartIrrigationControlPanel from './SmartIrrigationControlPanel';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -1746,6 +1747,14 @@ export default function LiveFieldInsights({ onWeatherDataFetched, activeLocation
               return null;
             })}
           </div>
+
+          {/* Toggleable Smart Irrigation Control & Valve Scheduling Panel */}
+          <motion.div variants={itemVariants}>
+            <SmartIrrigationControlPanel
+              weather={weather}
+              activeLocation={citySearch || weather.name}
+            />
+          </motion.div>
 
           {/* Interactive Expected Growth Cycles & Yield Projection Line Chart (Recharts) */}
           <motion.div variants={itemVariants}>
