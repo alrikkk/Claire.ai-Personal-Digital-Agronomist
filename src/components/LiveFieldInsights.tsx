@@ -6,6 +6,7 @@ import * as d3 from 'd3';
 import { OptimalPlantingAndVarieties } from './OptimalPlantingAndVarieties';
 import WindDirectionIndicator from './WindDirectionIndicator';
 import DailyAgronomyTipBanner from './DailyAgronomyTipBanner';
+import GrowthCycleYieldProjectionChart from './GrowthCycleYieldProjectionChart';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -1745,6 +1746,16 @@ export default function LiveFieldInsights({ onWeatherDataFetched, activeLocation
               return null;
             })}
           </div>
+
+          {/* Interactive Expected Growth Cycles & Yield Projection Line Chart (Recharts) */}
+          <motion.div variants={itemVariants}>
+            <GrowthCycleYieldProjectionChart
+              weather={weather}
+              activeLocation={citySearch || weather.name}
+              user={user}
+              projects={projects}
+            />
+          </motion.div>
 
           {/* Optimal Planting Times & Crop Variety Advisory Module */}
           <motion.div variants={itemVariants}>
