@@ -22,10 +22,13 @@ import {
   VolumeX, 
   Sparkles,
   ArrowRight,
-  RotateCcw
+  RotateCcw,
+  Activity
 } from 'lucide-react';
 import { WeatherData, IrrigationZone, IrrigationSchedule, showToast } from '../types';
 import AutomatedSchedulingSubPanel from './AutomatedSchedulingSubPanel';
+import SoilMoistureHistoryChart from './SoilMoistureHistoryChart';
+import IrrigationEfficiencySummaryCard from './IrrigationEfficiencySummaryCard';
 
 interface SmartIrrigationControlPanelProps {
   weather: WeatherData;
@@ -263,7 +266,7 @@ export default function SmartIrrigationControlPanel({ weather, activeLocation }:
   });
 
   // Active view tab
-  const [activeTab, setActiveTab] = useState<'zones' | 'schedules' | 'analytics'>('zones');
+  const [activeTab, setActiveTab] = useState<'zones' | 'schedules' | 'history' | 'analytics'>('zones');
 
   // Zones state
   const [zones, setZones] = useState<IrrigationZone[]>(() => {
@@ -677,6 +680,15 @@ export default function SmartIrrigationControlPanel({ weather, activeLocation }:
               </div>
             </div>
 
+            {/* Water Saved & Estimated Efficiency Summary Card (Automated vs Manual) */}
+            <div className="px-5 md:px-6 pt-4">
+              <IrrigationEfficiencySummaryCard
+                weather={weather}
+                zones={zones}
+                activeLocation={activeLocation}
+              />
+            </div>
+
             {/* Navigation Tabs & Quick Master Actions */}
             <div className="px-5 md:px-6 pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
               {/* Tabs */}
@@ -702,6 +714,17 @@ export default function SmartIrrigationControlPanel({ weather, activeLocation }:
                 >
                   <Calendar className="w-3.5 h-3.5 text-emerald-500" />
                   Automated Schedules ({schedules.filter(s => s.enabled).length}/{schedules.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('history')}
+                  className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
+                    activeTab === 'history'
+                      ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Activity className="w-3.5 h-3.5 text-cyan-500" />
+                  7-Day Moisture History
                 </button>
                 <button
                   onClick={() => setActiveTab('analytics')}
@@ -905,9 +928,18 @@ export default function SmartIrrigationControlPanel({ weather, activeLocation }:
               />
             )}
 
-            {/* Tab 3: Analytics & Water Conservation */}
+            {/* Tab 3: 7-Day Soil Moisture History Visualization (Recharts) */}
+            {activeTab === 'history' && (
+              <SoilMoistureHistoryChart
+                weather={weather}
+                zones={zones}
+                activeLocation={activeLocation}
+              />
+            )}
+
+            {/* Tab 4: Analytics & Water Conservation */}
             {activeTab === 'analytics' && (
-              <div className="p-5 md:p-6 space-y-4">
+              <div className="p-5 md:p-6 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   
                   {/* Card 1: Water Conserved */}
@@ -953,6 +985,15 @@ export default function SmartIrrigationControlPanel({ weather, activeLocation }:
                     </div>
                   </div>
 
+                </div>
+
+                {/* Embedded 7-Day Moisture History Trend in Analytics */}
+                <div className="pt-2 border-t border-slate-100">
+                  <SoilMoistureHistoryChart
+                    weather={weather}
+                    zones={zones}
+                    activeLocation={activeLocation}
+                  />
                 </div>
               </div>
             )}
