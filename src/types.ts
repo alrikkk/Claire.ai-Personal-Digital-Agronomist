@@ -304,11 +304,20 @@ export interface IrrigationZone {
 export interface IrrigationSchedule {
   id: string;
   name: string;
+  triggerType: 'daily' | 'weekly' | 'event_based';
   zoneIds: string[];
-  startTime: string;
+  startTime: string; // e.g. "05:30" (for daily/weekly)
   durationMinutes: number;
-  daysOfWeek: number[]; // 0 = Sun, 1 = Mon, etc.
+  daysOfWeek: number[]; // 0 = Sun, 1 = Mon, etc. (for weekly/daily)
   enabled: boolean;
+  eventCondition?: {
+    metric: 'soil_moisture_below' | 'temp_above' | 'humidity_below' | 'vpd_above';
+    threshold: number; // e.g. 20 for moisture < 20%
+    operator: '<' | '>';
+    unit: string;
+    cooldownHours: number;
+    lastTriggeredAt?: number;
+  };
   smartSkipConditions: {
     skipOnRain: boolean;
     rainThresholdPct: number;
@@ -318,5 +327,15 @@ export interface IrrigationSchedule {
     windThresholdKmH: number;
   };
   nextRun?: string;
+}
+
+export interface IrrigationTriggerLog {
+  id: string;
+  ruleName: string;
+  triggerType: 'daily' | 'weekly' | 'event_based';
+  zoneNames: string[];
+  timestamp: string;
+  reason: string;
+  litersDelivered: number;
 }
 

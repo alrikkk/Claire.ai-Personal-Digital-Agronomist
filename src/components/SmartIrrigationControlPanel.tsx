@@ -25,6 +25,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { WeatherData, IrrigationZone, IrrigationSchedule, showToast } from '../types';
+import AutomatedSchedulingSubPanel from './AutomatedSchedulingSubPanel';
 
 interface SmartIrrigationControlPanelProps {
   weather: WeatherData;
@@ -88,12 +89,39 @@ const DEFAULT_ZONES: IrrigationZone[] = [
 
 const DEFAULT_SCHEDULES: IrrigationSchedule[] = [
   {
-    id: 'sched-1',
+    id: 'sched-event-1',
+    name: 'Soil Moisture Deficit Trigger (< 20%)',
+    triggerType: 'event_based',
+    zoneIds: ['zone-1', 'zone-4'],
+    startTime: '06:00',
+    durationMinutes: 25,
+    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+    enabled: true,
+    eventCondition: {
+      metric: 'soil_moisture_below',
+      threshold: 20,
+      operator: '<',
+      unit: '%',
+      cooldownHours: 6
+    },
+    smartSkipConditions: {
+      skipOnRain: true,
+      rainThresholdPct: 35,
+      skipOnHighMoisture: true,
+      moistureThresholdPct: 38,
+      skipOnHighWind: true,
+      windThresholdKmH: 22
+    },
+    nextRun: 'Active Sensor Watch (Fires if Moisture < 20%)'
+  },
+  {
+    id: 'sched-daily-1',
     name: 'Dawn Deep Soak (Evaporation Saver)',
+    triggerType: 'daily',
     zoneIds: ['zone-1', 'zone-3'],
     startTime: '05:30',
     durationMinutes: 30,
-    daysOfWeek: [1, 3, 5], // Mon, Wed, Fri
+    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
     enabled: true,
     smartSkipConditions: {
       skipOnRain: true,
@@ -106,12 +134,13 @@ const DEFAULT_SCHEDULES: IrrigationSchedule[] = [
     nextRun: 'Tomorrow at 05:30 AM'
   },
   {
-    id: 'sched-2',
+    id: 'sched-weekly-1',
     name: 'Midday Micro-Cooling Pulse',
+    triggerType: 'weekly',
     zoneIds: ['zone-2'],
     startTime: '13:00',
     durationMinutes: 12,
-    daysOfWeek: [1, 2, 3, 4, 5, 6, 0], // Daily
+    daysOfWeek: [1, 3, 5], // Mon, Wed, Fri
     enabled: true,
     smartSkipConditions: {
       skipOnRain: true,
@@ -121,15 +150,42 @@ const DEFAULT_SCHEDULES: IrrigationSchedule[] = [
       skipOnHighWind: true,
       windThresholdKmH: 18
     },
-    nextRun: 'Today at 01:00 PM'
+    nextRun: 'Wednesday at 01:00 PM'
   },
   {
-    id: 'sched-3',
-    name: 'Nursery Moisture Maintenance',
+    id: 'sched-event-2',
+    name: 'Canopy Heat Stress Protection (> 32°C)',
+    triggerType: 'event_based',
+    zoneIds: ['zone-2'],
+    startTime: '12:00',
+    durationMinutes: 10,
+    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+    enabled: true,
+    eventCondition: {
+      metric: 'temp_above',
+      threshold: 32,
+      operator: '>',
+      unit: '°C',
+      cooldownHours: 4
+    },
+    smartSkipConditions: {
+      skipOnRain: true,
+      rainThresholdPct: 40,
+      skipOnHighMoisture: true,
+      moistureThresholdPct: 45,
+      skipOnHighWind: true,
+      windThresholdKmH: 20
+    },
+    nextRun: 'Active Sensor Watch (Fires if Temp > 32°C)'
+  },
+  {
+    id: 'sched-daily-2',
+    name: 'Nursery Moisture Top-Up',
+    triggerType: 'daily',
     zoneIds: ['zone-4'],
     startTime: '18:15',
     durationMinutes: 20,
-    daysOfWeek: [2, 4, 6], // Tue, Thu, Sat
+    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
     enabled: false,
     smartSkipConditions: {
       skipOnRain: false,
@@ -227,7 +283,13 @@ export default function SmartIrrigationControlPanel({ weather, activeLocation }:
     const saved = localStorage.getItem('claire_irrigation_schedules');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed: IrrigationSchedule[] = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map(s => ({
+            ...s,
+            triggerType: s.triggerType || (s.daysOfWeek && s.daysOfWeek.length === 7 ? 'daily' : 'weekly')
+          }));
+        }
       } catch {
         return DEFAULT_SCHEDULES;
       }
@@ -242,16 +304,6 @@ export default function SmartIrrigationControlPanel({ weather, activeLocation }:
     'zone-3': 30,
     'zone-4': 10
   });
-
-  // Modal for adding a new schedule
-  const [isAddScheduleModalOpen, setIsAddScheduleModalOpen] = useState(false);
-  const [newScheduleName, setNewScheduleName] = useState('');
-  const [newScheduleTime, setNewScheduleTime] = useState('06:00');
-  const [newScheduleDuration, setNewScheduleDuration] = useState(25);
-  const [newScheduleDays, setNewScheduleDays] = useState<number[]>([1, 2, 3, 4, 5]);
-  const [newScheduleZones, setNewScheduleZones] = useState<string[]>(['zone-1']);
-  const [newScheduleSkipRain, setNewScheduleSkipRain] = useState(true);
-  const [newScheduleSkipMoisture, setNewScheduleSkipMoisture] = useState(true);
 
   // Sync zones and schedules to localStorage
   useEffect(() => {
@@ -408,61 +460,6 @@ export default function SmartIrrigationControlPanel({ weather, activeLocation }:
     // Start Zone 1 first
     handleTriggerZone('zone-1', selectedDuration['zone-1'] || 15);
     showToast('Sequential multi-zone soak cycle queued.', 'success');
-  };
-
-  // Toggle schedule enabled/disabled
-  const handleToggleSchedule = (scheduleId: string) => {
-    if (soundEnabled) playIrrigationSound('toggle');
-    setSchedules(prev => prev.map(sched => {
-      if (sched.id === scheduleId) {
-        const updatedEnabled = !sched.enabled;
-        return {
-          ...sched,
-          enabled: updatedEnabled,
-          nextRun: updatedEnabled ? 'Active on schedule' : 'Paused'
-        };
-      }
-      return sched;
-    }));
-  };
-
-  // Delete schedule
-  const handleDeleteSchedule = (scheduleId: string) => {
-    setSchedules(prev => prev.filter(s => s.id !== scheduleId));
-    showToast('Schedule removed.', 'info');
-  };
-
-  // Add new schedule
-  const handleCreateSchedule = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newScheduleName.trim()) {
-      showToast('Please enter a schedule name.', 'warning');
-      return;
-    }
-
-    const newSched: IrrigationSchedule = {
-      id: `sched-${Date.now()}`,
-      name: newScheduleName.trim(),
-      zoneIds: newScheduleZones,
-      startTime: newScheduleTime,
-      durationMinutes: newScheduleDuration,
-      daysOfWeek: newScheduleDays,
-      enabled: true,
-      smartSkipConditions: {
-        skipOnRain: newScheduleSkipRain,
-        rainThresholdPct: 35,
-        skipOnHighMoisture: newScheduleSkipMoisture,
-        moistureThresholdPct: 40,
-        skipOnHighWind: true,
-        windThresholdKmH: 22
-      },
-      nextRun: `Scheduled at ${newScheduleTime}`
-    };
-
-    setSchedules(prev => [...prev, newSched]);
-    setIsAddScheduleModalOpen(false);
-    setNewScheduleName('');
-    showToast('New smart irrigation schedule created.', 'success');
   };
 
   // Format seconds to mm:ss
@@ -895,121 +892,17 @@ export default function SmartIrrigationControlPanel({ weather, activeLocation }:
               </div>
             )}
 
-            {/* Tab 2: Automated Schedules */}
+            {/* Tab 2: Automated Scheduling Sub-panel */}
             {activeTab === 'schedules' && (
-              <div className="p-5 md:p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-800">Dynamic Watering Schedules</h4>
-                    <p className="text-xs text-slate-500">
-                      Timers evaluate active sensor data and skip watering if rainfall or moisture thresholds are met.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setIsAddScheduleModalOpen(true)}
-                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors flex items-center gap-1.5"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    New Schedule
-                  </button>
-                </div>
-
-                <div className="space-y-3">
-                  {schedules.map((schedule) => {
-                    const mappedZones = zones.filter(z => schedule.zoneIds.includes(z.id));
-
-                    return (
-                      <div
-                        key={schedule.id}
-                        className={`p-4 rounded-2xl border transition-all ${
-                          schedule.enabled
-                            ? 'bg-white border-slate-200 shadow-xs'
-                            : 'bg-slate-50/50 border-slate-100 opacity-60'
-                        }`}
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                          
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <h5 className="text-sm font-bold text-slate-800">{schedule.name}</h5>
-                              <span className="text-xs text-slate-400">·</span>
-                              <span className="text-xs font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-md">
-                                {schedule.startTime} ({schedule.durationMinutes} mins)
-                              </span>
-                            </div>
-
-                            <p className="text-xs text-slate-500">
-                              Targeting: {mappedZones.map(z => z.name).join(', ')}
-                            </p>
-
-                            {/* Active Days */}
-                            <div className="flex items-center gap-1 pt-1">
-                              {DAY_NAMES.map((day, idx) => {
-                                const isDayActive = schedule.daysOfWeek.includes(idx);
-                                return (
-                                  <span
-                                    key={day}
-                                    className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                                      isDayActive
-                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold'
-                                        : 'text-slate-300'
-                                    }`}
-                                  >
-                                    {day}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                          {/* Controls & Smart Rules */}
-                          <div className="flex items-center gap-3 self-end sm:self-center">
-                            
-                            {/* Smart Skip Badges */}
-                            <div className="hidden md:flex flex-col items-end gap-1 text-[10px] text-slate-500">
-                              {schedule.smartSkipConditions.skipOnRain && (
-                                <span className="flex items-center gap-1 text-sky-600">
-                                  <CloudRain className="w-3 h-3" /> Skip if rain &gt; 35%
-                                </span>
-                              )}
-                              {schedule.smartSkipConditions.skipOnHighMoisture && (
-                                <span className="flex items-center gap-1 text-emerald-600">
-                                  <Droplets className="w-3 h-3" /> Skip if moisture &gt; 38%
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Toggle Switch */}
-                            <button
-                              onClick={() => handleToggleSchedule(schedule.id)}
-                              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
-                                schedule.enabled ? 'bg-emerald-500' : 'bg-slate-200'
-                              }`}
-                            >
-                              <span
-                                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                                  schedule.enabled ? 'translate-x-5' : 'translate-x-0'
-                                }`}
-                              />
-                            </button>
-
-                            {/* Delete Button */}
-                            <button
-                              onClick={() => handleDeleteSchedule(schedule.id)}
-                              className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 transition-colors"
-                              title="Delete schedule"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-
-                          </div>
-
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              <AutomatedSchedulingSubPanel
+                weather={weather}
+                zones={zones}
+                schedules={schedules}
+                onUpdateSchedules={(newSchedules) => setSchedules(newSchedules)}
+                onTriggerZone={handleTriggerZone}
+                soundEnabled={soundEnabled}
+                onPlaySound={playIrrigationSound}
+              />
             )}
 
             {/* Tab 3: Analytics & Water Conservation */}
@@ -1067,172 +960,6 @@ export default function SmartIrrigationControlPanel({ weather, activeLocation }:
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* New Schedule Modal */}
-      {isAddScheduleModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100 space-y-4"
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="text-base font-bold text-slate-800">Create Irrigation Schedule</h3>
-              <button
-                onClick={() => setIsAddScheduleModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 text-sm font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateSchedule} className="space-y-4 text-xs">
-              
-              {/* Name */}
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Schedule Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Dawn Pivot Soak"
-                  value={newScheduleName}
-                  onChange={(e) => setNewScheduleName(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
-                  required
-                />
-              </div>
-
-              {/* Time & Duration */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Start Time</label>
-                  <input
-                    type="time"
-                    value={newScheduleTime}
-                    onChange={(e) => setNewScheduleTime(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Duration (mins)</label>
-                  <input
-                    type="number"
-                    min="5"
-                    max="180"
-                    value={newScheduleDuration}
-                    onChange={(e) => setNewScheduleDuration(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Target Zone Selection */}
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Target Zone(s)</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {zones.map(z => (
-                    <label
-                      key={z.id}
-                      className={`p-2 rounded-xl border flex items-center gap-2 cursor-pointer transition-colors ${
-                        newScheduleZones.includes(z.id)
-                          ? 'bg-sky-50 border-sky-300 text-sky-800'
-                          : 'border-slate-200 text-slate-600'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={newScheduleZones.includes(z.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setNewScheduleZones([...newScheduleZones, z.id]);
-                          } else {
-                            setNewScheduleZones(newScheduleZones.filter(id => id !== z.id));
-                          }
-                        }}
-                        className="rounded text-sky-600 focus:ring-sky-500"
-                      />
-                      <span className="truncate">{z.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Days of Week */}
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Repeat Days</label>
-                <div className="flex items-center gap-1.5">
-                  {DAY_NAMES.map((day, idx) => {
-                    const isSelected = newScheduleDays.includes(idx);
-                    return (
-                      <button
-                        type="button"
-                        key={day}
-                        onClick={() => {
-                          if (isSelected) {
-                            setNewScheduleDays(newScheduleDays.filter(d => d !== idx));
-                          } else {
-                            setNewScheduleDays([...newScheduleDays, idx]);
-                          }
-                        }}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                          isSelected
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        {day[0]}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Smart Skip Rules */}
-              <div className="p-3 bg-slate-50 rounded-xl space-y-2 border border-slate-100">
-                <span className="font-semibold text-slate-700 block">Smart Weather Conditions</span>
-                <label className="flex items-center gap-2 text-slate-600 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={newScheduleSkipRain}
-                    onChange={(e) => setNewScheduleSkipRain(e.target.checked)}
-                    className="rounded text-emerald-600"
-                  />
-                  <span>Skip cycle if precipitation is forecasted</span>
-                </label>
-                <label className="flex items-center gap-2 text-slate-600 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={newScheduleSkipMoisture}
-                    onChange={(e) => setNewScheduleSkipMoisture(e.target.checked)}
-                    className="rounded text-emerald-600"
-                  />
-                  <span>Skip cycle if root zone soil moisture &gt; 38%</span>
-                </label>
-              </div>
-
-              {/* Submit Buttons */}
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAddScheduleModalOpen(false)}
-                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 rounded-xl font-semibold text-slate-600 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-colors shadow-xs"
-                >
-                  Save Schedule
-                </button>
-              </div>
-
-            </form>
-          </motion.div>
-        </div>
-      )}
 
     </div>
   );
