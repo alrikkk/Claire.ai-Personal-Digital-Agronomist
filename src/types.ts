@@ -343,9 +343,13 @@ export interface CropMoistureThreshold {
   cropId: string;
   cropName: string;
   category: 'grain' | 'legume' | 'fruit' | 'nursery' | 'vegetable';
-  criticalThreshold: number; // Moisture % below which irreversible root stress occurs
-  warningThreshold: number;  // Moisture % for proactive warning notification
-  targetMoisture: number;    // Target moisture % for field capacity
+  criticalThreshold: number; // Current effective Moisture % below which irreversible root stress occurs
+  warningThreshold: number;  // Current effective Moisture % for proactive warning notification
+  targetMoisture: number;    // Current effective Moisture % for field capacity
+  baselineCriticalThreshold?: number; // User-defined or FAO baseline before ET adjustment
+  baselineWarningThreshold?: number;  // User-defined baseline before ET adjustment
+  baselineTargetMoisture?: number;    // User-defined baseline before ET adjustment
+  cropCoefficientKc?: number;          // FAO-56 Kc crop factor (e.g. 1.15)
   autoIrrigateOnCritical: boolean; // Automatically trigger zone valve when critical breach occurs
   autoEmergencyDurationMinutes: number;
   notifyOnCritical: boolean; // Send proactive high-priority notification
@@ -354,4 +358,29 @@ export interface CropMoistureThreshold {
   faoReferenceStage: string;
   lastAlertSentAt?: number;
 }
+
+export interface SmartSchedulingConfig {
+  enabled: boolean;
+  sensitivity: 'conservative' | 'balanced' | 'aggressive';
+  lastUpdatedDate: string;
+  lastUpdatedTimestamp: number;
+  dailyEt0: number; // Reference ET in mm/day
+  avgEtc: number; // Average crop ET in mm/day
+  calculatedVpdKpa: number; // Vapor pressure deficit in kPa
+  todayAdjustmentSummary: string;
+}
+
+export interface DailyEtRecord {
+  date: string;
+  dayName: string;
+  tempC: number;
+  humidityPct: number;
+  windSpeedKmH: number;
+  dayType: string;
+  et0Mm: number;
+  etcMm: number;
+  thresholdOffsetPct: number;
+  adjustmentNote: string;
+}
+
 

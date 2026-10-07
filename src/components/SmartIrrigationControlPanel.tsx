@@ -758,7 +758,8 @@ export default function SmartIrrigationControlPanel({ weather, activeLocation }:
                   }`}
                 >
                   <Sprout className="w-3.5 h-3.5 text-emerald-500" />
-                  Crop Moisture Thresholds & Alerts
+                  <span>Crop Moisture & Smart ET</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" title="Smart Scheduling ET-Active" />
                 </button>
               </div>
 
