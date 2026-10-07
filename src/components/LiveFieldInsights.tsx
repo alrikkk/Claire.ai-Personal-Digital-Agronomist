@@ -8,6 +8,7 @@ import WindDirectionIndicator from './WindDirectionIndicator';
 import DailyAgronomyTipBanner from './DailyAgronomyTipBanner';
 import GrowthCycleYieldProjectionChart from './GrowthCycleYieldProjectionChart';
 import SmartIrrigationControlPanel from './SmartIrrigationControlPanel';
+import CropGrowthPredictionModule from './CropGrowthPredictionModule';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -1753,6 +1754,16 @@ export default function LiveFieldInsights({ onWeatherDataFetched, activeLocation
             <SmartIrrigationControlPanel
               weather={weather}
               activeLocation={citySearch || weather.name}
+            />
+          </motion.div>
+
+          {/* AI-Powered Crop Growth Prediction & Maturity Timelines Module (Gemini 3.8 Flash) */}
+          <motion.div variants={itemVariants}>
+            <CropGrowthPredictionModule
+              weather={weather}
+              activeLocation={citySearch || weather.name}
+              user={user}
+              projects={projects}
             />
           </motion.div>
 

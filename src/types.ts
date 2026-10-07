@@ -277,8 +277,8 @@ export interface VertexPublicDataRecord {
   officialSourceUrl: string;
 }
 
-export function showToast(message: string, type: 'success' | 'info' | 'error' | 'warning' = 'success') {
-  window.dispatchEvent(new CustomEvent('claire-toast', { detail: { message, type } }));
+export function showToast(message: string, type: 'success' | 'info' | 'error' | 'warning' = 'success', title?: string) {
+  window.dispatchEvent(new CustomEvent('claire-toast', { detail: { message, type, title } }));
 }
 
 export interface IrrigationZone {
@@ -354,6 +354,10 @@ export interface CropMoistureThreshold {
   autoEmergencyDurationMinutes: number;
   notifyOnCritical: boolean; // Send proactive high-priority notification
   notifyOnWarning: boolean;  // Send proactive advisory notification
+  alertHysteresisMinutes?: number; // Sustained moisture breach window before push notification
+  alertPriority?: 'high' | 'urgent' | 'standard'; // Push notification urgency
+  pushSoundEnabled?: boolean; // Audible push sound
+  alertLeadBufferPct?: number; // Fine-tune warning lead margin % before critical cutoff
   rootDepthCm: number;
   faoReferenceStage: string;
   lastAlertSentAt?: number;
@@ -381,6 +385,75 @@ export interface DailyEtRecord {
   etcMm: number;
   thresholdOffsetPct: number;
   adjustmentNote: string;
+}
+
+export interface GrowthStageTimelineItem {
+  stageName: string;
+  stageCode: string;
+  faoStage: 'Initial' | 'Crop Development' | 'Mid-Season' | 'Late Season' | 'Harvest Maturity';
+  dayStart: number;
+  dayEnd: number;
+  estimatedDate: string;
+  gddAccumulated: number; // Growing Degree Days target
+  biomassPct: number; // 0 - 100%
+  canopyCoverPct: number;
+  kcFactor: number; // Crop coefficient Kc
+  status: 'completed' | 'current' | 'upcoming';
+  waterRequirementMm: number;
+  criticalNutrients: string[];
+  keyRisks: string[];
+  fieldActionTips: string[];
+}
+
+export interface ClimateAdjustmentFactor {
+  parameter: string;
+  observedValue: string;
+  baselineNormal: string;
+  impactOnMaturity: string; // e.g. "+4 days delay", "-2 days accelerated"
+  severity: 'favorable' | 'warning' | 'critical' | 'neutral';
+  explanation: string;
+}
+
+export interface CropGrowthPredictionResult {
+  id: string;
+  cropName: string;
+  cropVariety: string;
+  plantingDate: string;
+  currentDate: string;
+  daysSincePlanting: number;
+  totalMaturityDays: number;
+  estimatedHarvestDate: string;
+  currentStageIndex: number;
+  currentStageName: string;
+  currentStageProgressPct: number;
+  overallMaturityProgressPct: number;
+  accumulatedGdd: number;
+  projectedTotalGdd: number;
+  gddPaceAssessment: 'ahead' | 'on_schedule' | 'delayed';
+  confidenceScore: number; // 0 - 100
+  harvestWindow: {
+    earlyDate: string;
+    optimalDate: string;
+    lateDate: string;
+  };
+  stages: GrowthStageTimelineItem[];
+  climateAdjustments: ClimateAdjustmentFactor[];
+  yieldExpectation: {
+    projectedYieldTonsHa: number;
+    baselineYieldTonsHa: number;
+    variancePct: number;
+    limitingFactor: string;
+  };
+  aiAgronomistSynthesis: {
+    summary: string;
+    irrigationStrategy: string;
+    pestDiseaseVulnerability: string;
+    harvestReadinessIndicators: string[];
+    immediateActionItem: string;
+  };
+  generatedAt: string;
+  locationName: string;
+  isAiGenerated: boolean;
 }
 
 

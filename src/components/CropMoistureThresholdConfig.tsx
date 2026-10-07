@@ -37,7 +37,13 @@ import {
   Sliders,
   Check,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Smartphone,
+  Volume2,
+  VolumeX,
+  Radio,
+  Send,
+  Target
 } from 'lucide-react';
 import { IrrigationZone, CropMoistureThreshold, WeatherData, showToast } from '../types';
 import {
@@ -74,6 +80,10 @@ export const DEFAULT_CROP_THRESHOLDS: CropMoistureThreshold[] = [
     autoEmergencyDurationMinutes: 20,
     notifyOnCritical: true,
     notifyOnWarning: true,
+    alertLeadBufferPct: 8,
+    alertHysteresisMinutes: 5,
+    alertPriority: 'urgent',
+    pushSoundEnabled: true,
     rootDepthCm: 80,
     faoReferenceStage: 'Tasseling & Silking'
   },
@@ -92,6 +102,10 @@ export const DEFAULT_CROP_THRESHOLDS: CropMoistureThreshold[] = [
     autoEmergencyDurationMinutes: 15,
     notifyOnCritical: true,
     notifyOnWarning: true,
+    alertLeadBufferPct: 8,
+    alertHysteresisMinutes: 5,
+    alertPriority: 'urgent',
+    pushSoundEnabled: true,
     rootDepthCm: 60,
     faoReferenceStage: 'Pod Setting (R3-R4)'
   },
@@ -110,6 +124,10 @@ export const DEFAULT_CROP_THRESHOLDS: CropMoistureThreshold[] = [
     autoEmergencyDurationMinutes: 25,
     notifyOnCritical: true,
     notifyOnWarning: true,
+    alertLeadBufferPct: 8,
+    alertHysteresisMinutes: 10,
+    alertPriority: 'high',
+    pushSoundEnabled: true,
     rootDepthCm: 90,
     faoReferenceStage: 'Fruit Expansion'
   },
@@ -128,6 +146,10 @@ export const DEFAULT_CROP_THRESHOLDS: CropMoistureThreshold[] = [
     autoEmergencyDurationMinutes: 15,
     notifyOnCritical: true,
     notifyOnWarning: true,
+    alertLeadBufferPct: 10,
+    alertHysteresisMinutes: 0,
+    alertPriority: 'urgent',
+    pushSoundEnabled: true,
     rootDepthCm: 15,
     faoReferenceStage: 'Early Emergence / Cotyledon'
   },
@@ -146,6 +168,10 @@ export const DEFAULT_CROP_THRESHOLDS: CropMoistureThreshold[] = [
     autoEmergencyDurationMinutes: 20,
     notifyOnCritical: true,
     notifyOnWarning: false,
+    alertLeadBufferPct: 8,
+    alertHysteresisMinutes: 15,
+    alertPriority: 'standard',
+    pushSoundEnabled: false,
     rootDepthCm: 75,
     faoReferenceStage: 'Booting to Heading'
   },
@@ -164,6 +190,10 @@ export const DEFAULT_CROP_THRESHOLDS: CropMoistureThreshold[] = [
     autoEmergencyDurationMinutes: 20,
     notifyOnCritical: true,
     notifyOnWarning: true,
+    alertLeadBufferPct: 8,
+    alertHysteresisMinutes: 5,
+    alertPriority: 'urgent',
+    pushSoundEnabled: true,
     rootDepthCm: 50,
     faoReferenceStage: 'First Cluster Bloom'
   }
@@ -517,6 +547,72 @@ export default function CropMoistureThresholdConfig({
     }
   };
 
+  // Zones linked to the currently selected crop profile
+  const activeCropZones = useMemo(() => {
+    if (!activeCrop) return [];
+    return zones.filter(zone => 
+      zone.cropType.toLowerCase().includes(activeCrop.cropName.toLowerCase().split(' ')[0].toLowerCase()) ||
+      activeCrop.cropName.toLowerCase().includes(zone.cropType.toLowerCase().split(' ')[0].toLowerCase())
+    );
+  }, [zones, activeCrop]);
+
+  const activeCropZonesEvaluation = useMemo(() => {
+    if (!activeCrop) return [];
+    return activeCropZones.map(zone => {
+      const effectiveMoisture = Math.max(5, Math.min(100, zone.currentMoisture + (isSimulatingStress ? simulationMoistureOffset : 0)));
+      const isBreachingCritical = effectiveMoisture < activeCrop.criticalThreshold;
+      const warningPoint = activeCrop.criticalThreshold + (activeCrop.alertLeadBufferPct ?? 8);
+      const isWarning = !isBreachingCritical && effectiveMoisture < warningPoint;
+      return {
+        zone,
+        effectiveMoisture,
+        isBreachingCritical,
+        isWarning,
+        margin: Number((effectiveMoisture - activeCrop.criticalThreshold).toFixed(1))
+      };
+    });
+  }, [activeCropZones, activeCrop, isSimulatingStress, simulationMoistureOffset]);
+
+  const activeCropBreachedCount = activeCropZonesEvaluation.filter(z => z.isBreachingCritical).length;
+
+  // Trigger realistic simulated push notification for current crop alert threshold
+  const handleSendTestPushNotification = (cropToTest?: CropMoistureThreshold) => {
+    const crop = cropToTest || activeCrop;
+    if (!crop) return;
+
+    if (onPlaySound && soundEnabled && (crop.pushSoundEnabled ?? true)) {
+      onPlaySound('start');
+    }
+
+    const matchingZone = activeCropZones[0] || zones[0];
+    const currentZoneMoisture = matchingZone 
+      ? Math.max(5, Math.min(100, matchingZone.currentMoisture + (isSimulatingStress ? simulationMoistureOffset : 0)))
+      : 19.5;
+    
+    // Simulate drop below critical if not already below
+    const breachMoisture = currentZoneMoisture < crop.criticalThreshold 
+      ? currentZoneMoisture 
+      : Math.max(8, Number((crop.criticalThreshold - 2.4).toFixed(1)));
+
+    const alertId = 'push-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+    const title = `🚨 PROACTIVE PUSH ALERT: [${crop.cropName}] Critical Moisture Breach`;
+    const message = `Tensiometer in ${matchingZone?.name || 'Field Block'} detected ${breachMoisture}% VWC, breaching your tuned Alert Threshold of ${crop.criticalThreshold.toFixed(1)}%. Immediate proactive root-stress notification triggered!`;
+
+    showToast(message, 'error', title);
+
+    const newAlert = {
+      id: alertId,
+      cropName: crop.cropName,
+      zoneName: matchingZone?.name || 'Field Block',
+      moisture: breachMoisture,
+      threshold: crop.criticalThreshold,
+      severity: 'critical' as const,
+      time: 'Just now (Push Test)'
+    };
+
+    setAlertHistory(prev => [newAlert, ...prev].slice(0, 15));
+  };
+
   // Add custom crop handler
   const handleAddCustomCrop = (e: React.FormEvent) => {
     e.preventDefault();
@@ -554,6 +650,10 @@ export default function CropMoistureThresholdConfig({
       autoEmergencyDurationMinutes: 15,
       notifyOnCritical: true,
       notifyOnWarning: true,
+      alertLeadBufferPct: 8,
+      alertHysteresisMinutes: 5,
+      alertPriority: 'urgent',
+      pushSoundEnabled: true,
       rootDepthCm: Number(newRootDepth),
       faoReferenceStage: newStage || 'Active Growth'
     };
@@ -1466,215 +1566,640 @@ export default function CropMoistureThresholdConfig({
                 </div>
               )}
 
-              {/* Threshold Sliders Section */}
-              <div className="space-y-5">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                    <SlidersHorizontal className="w-3.5 h-3.5 text-sky-600" />
-                    Soil Moisture Trigger Calibration
-                  </h4>
-                  <span className="text-[11px] text-slate-400">Values in Volumetric Water Content %</span>
-                </div>
-
-                {/* 1. Critical Wilting Threshold Slider */}
-                <div className="bg-rose-50/50 p-4 rounded-xl border border-rose-200/80 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Flame className="w-4 h-4 text-rose-600" />
+              {/* ========================================================================= */}
+              {/* 'ALERT THRESHOLD' SLIDER SET & PROACTIVE PUSH NOTIFICATION CENTER       */}
+              {/* ========================================================================= */}
+              <div className="space-y-6">
+                
+                {/* Header with status pill & threat telemetry */}
+                <div className="bg-gradient-to-r from-rose-50 via-amber-50/40 to-slate-50 p-4 rounded-2xl border border-rose-200/80 shadow-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-xl bg-rose-600 text-white shadow-xs">
+                        <SlidersHorizontal className="w-4 h-4" />
+                      </div>
                       <div>
-                        <span className="text-xs font-bold text-rose-950">
-                          Critical Wilting Threshold (Emergency Alarm)
-                        </span>
-                        <p className="text-[11px] text-rose-700/80">
-                          Root stress point where capillary water retention fails. Triggers instant high-priority alerts.
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-bold text-slate-900 tracking-tight">
+                            'Alert Threshold' Slider Set
+                          </h4>
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200">
+                            Fine-Tuning Active
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 mt-0.5">
+                          Fine-tune the critical moisture setpoint, early advisory buffer, and noise filter before proactive push notifications are dispatched.
                         </p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <span className="text-lg font-bold text-rose-700">{activeCrop.criticalThreshold}%</span>
-                      {smartSchedulingEnabled && activeCrop.baselineCriticalThreshold && (
-                        <span className="block text-[10px] text-rose-600 font-medium">
-                          (Base: {activeCrop.baselineCriticalThreshold}%)
-                        </span>
-                      )}
-                    </div>
-                  </div>
 
-                  <input
-                    type="range"
-                    min="10"
-                    max="45"
-                    step="1"
-                    value={activeCrop.criticalThreshold}
-                    onChange={(e) => updateActiveCrop({ 
-                      criticalThreshold: Number(e.target.value),
-                      warningThreshold: Math.max(Number(e.target.value) + 3, activeCrop.warningThreshold)
-                    })}
-                    className="w-full accent-rose-600 cursor-pointer"
-                  />
-                  <div className="flex justify-between text-[10px] text-rose-600/80 font-medium">
-                    <span>10% (Severe Drought)</span>
-                    <span>Agronomic Default: 24%</span>
-                    <span>45% (High Moisture Sensitive)</span>
+                    {/* Status badges */}
+                    <div className="flex items-center gap-2 flex-wrap shrink-0">
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white border border-slate-200 text-xs shadow-2xs">
+                        <span className={`w-2 h-2 rounded-full ${
+                          activeCropBreachedCount > 0 ? 'bg-rose-500 animate-ping' : 'bg-emerald-500'
+                        }`} />
+                        <span className="text-[11px] font-semibold text-slate-700">
+                          {activeCropBreachedCount > 0 ? (
+                            <span className="text-rose-700 font-bold">{activeCropBreachedCount} Zone(s) Breached</span>
+                          ) : (
+                            <span className="text-emerald-700 font-bold">All Zones in Safe Band</span>
+                          )}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white border border-slate-200 text-xs shadow-2xs">
+                        <Smartphone className="w-3.5 h-3.5 text-sky-600" />
+                        <span className="text-[11px] font-semibold text-slate-700">
+                          Push: {activeCrop.notifyOnCritical ? 'ARMED' : 'PAUSED'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* 2. Warning Moisture Threshold Slider */}
-                <div className="bg-amber-50/50 p-4 rounded-xl border border-amber-200/80 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-600" />
+                {/* ------------------------------------------------------------------------- */}
+                {/* 1. PRIMARY ALERT THRESHOLD SLIDER: CRITICAL MOISTURE POINT                */}
+                {/* ------------------------------------------------------------------------- */}
+                <div className="bg-gradient-to-b from-rose-50/70 to-rose-50/30 p-5 rounded-2xl border-2 border-rose-200 shadow-xs space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <div className="p-2 rounded-xl bg-rose-500 text-white shrink-0 mt-0.5">
+                        <Flame className="w-4 h-4" />
+                      </div>
                       <div>
-                        <span className="text-xs font-bold text-amber-950">
-                          Proactive Warning Moisture Threshold
-                        </span>
-                        <p className="text-[11px] text-amber-700/80">
-                          Early advisory threshold to prevent stomatal closure before irreversible yield loss.
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-rose-950 uppercase tracking-wider">
+                            Critical Moisture Alert Point
+                          </span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-200/80 text-rose-800">
+                            Primary Push Trigger
+                          </span>
+                        </div>
+                        <p className="text-xs text-rose-800/85 mt-0.5 leading-relaxed">
+                          Fine-tune the exact volumetric water content limit. If soil drops below this setpoint, Claire dispatches an instant proactive push notification and initiates emergency protocol.
                         </p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <span className="text-lg font-bold text-amber-700">{activeCrop.warningThreshold}%</span>
-                      {smartSchedulingEnabled && activeCrop.baselineWarningThreshold && (
-                        <span className="block text-[10px] text-amber-600 font-medium">
-                          (Base: {activeCrop.baselineWarningThreshold}%)
+
+                    {/* Numerical readout display */}
+                    <div className="text-left sm:text-right bg-white sm:bg-transparent p-3 sm:p-0 rounded-xl sm:rounded-none border sm:border-0 border-rose-200 shrink-0">
+                      <div className="flex items-baseline sm:justify-end gap-1">
+                        <span className="text-3xl font-black text-rose-600 tracking-tight font-mono">
+                          {Number(activeCrop.criticalThreshold).toFixed(1)}%
                         </span>
-                      )}
+                        <span className="text-xs font-bold text-rose-500">VWC</span>
+                      </div>
+                      <span className="block text-[11px] text-rose-700/80 font-medium">
+                        {smartSchedulingEnabled && activeCrop.baselineCriticalThreshold ? (
+                          <span>Base {activeCrop.baselineCriticalThreshold}% {activeCropAdjustment.criticalOffset >= 0 ? `+${activeCropAdjustment.criticalOffset}% ET` : `${activeCropAdjustment.criticalOffset}% ET`}</span>
+                        ) : (
+                          <span>Manual Static Point</span>
+                        )}
+                      </span>
                     </div>
                   </div>
 
-                  <input
-                    type="range"
-                    min={activeCrop.criticalThreshold + 1}
-                    max="55"
-                    step="1"
-                    value={activeCrop.warningThreshold}
-                    onChange={(e) => updateActiveCrop({ 
-                      warningThreshold: Number(e.target.value),
-                      targetMoisture: Math.max(Number(e.target.value) + 4, activeCrop.targetMoisture)
-                    })}
-                    className="w-full accent-amber-500 cursor-pointer"
-                  />
-                  <div className="flex justify-between text-[10px] text-amber-600/80 font-medium">
-                    <span>{activeCrop.criticalThreshold + 1}% (Above Critical)</span>
-                    <span>Early Advisory Buffer</span>
-                    <span>55% (High Moisture)</span>
+                  {/* Slider Control */}
+                  <div className="space-y-1.5 pt-1">
+                    <input
+                      type="range"
+                      min="10"
+                      max="45"
+                      step="0.5"
+                      value={activeCrop.criticalThreshold}
+                      onChange={(e) => {
+                        const newCrit = Number(e.target.value);
+                        const leadBuffer = activeCrop.alertLeadBufferPct ?? 8;
+                        updateActiveCrop({ 
+                          criticalThreshold: newCrit,
+                          warningThreshold: Math.max(newCrit + leadBuffer, activeCrop.warningThreshold)
+                        });
+                      }}
+                      className="w-full accent-rose-600 cursor-pointer h-2.5 bg-rose-200 rounded-lg"
+                    />
+
+                    <div className="flex justify-between text-[10px] text-rose-700/80 font-medium px-0.5">
+                      <span>10.0% (Severe Desiccation)</span>
+                      <span>Agronomic Wilting Baseline: 24.0%</span>
+                      <span>45.0% (High Water Sensitivity)</span>
+                    </div>
+                  </div>
+
+                  {/* Micro-Adjustment Nudge Steppers & Agronomic Presets */}
+                  <div className="pt-2 border-t border-rose-200/70 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    {/* Stepper Buttons for Fine Precision */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] font-bold text-rose-900 mr-1 flex items-center gap-1">
+                        <Target className="w-3.5 h-3.5 text-rose-600" />
+                        Fine-Tune Nudge:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = Math.max(10, Math.round((activeCrop.criticalThreshold - 1.0) * 10) / 10);
+                          const leadBuffer = activeCrop.alertLeadBufferPct ?? 8;
+                          updateActiveCrop({ criticalThreshold: updated, warningThreshold: Math.max(updated + leadBuffer, activeCrop.warningThreshold) });
+                        }}
+                        className="px-2 py-1 text-xs font-bold rounded-lg bg-white border border-rose-200 hover:bg-rose-100 text-rose-700 transition-colors cursor-pointer shadow-2xs"
+                        title="Decrease Alert Threshold by 1.0%"
+                      >
+                        -1.0%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = Math.max(10, Math.round((activeCrop.criticalThreshold - 0.5) * 10) / 10);
+                          const leadBuffer = activeCrop.alertLeadBufferPct ?? 8;
+                          updateActiveCrop({ criticalThreshold: updated, warningThreshold: Math.max(updated + leadBuffer, activeCrop.warningThreshold) });
+                        }}
+                        className="px-2 py-1 text-xs font-bold rounded-lg bg-white border border-rose-200 hover:bg-rose-100 text-rose-700 transition-colors cursor-pointer shadow-2xs"
+                        title="Decrease Alert Threshold by 0.5%"
+                      >
+                        -0.5%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = Math.min(45, Math.round((activeCrop.criticalThreshold + 0.5) * 10) / 10);
+                          const leadBuffer = activeCrop.alertLeadBufferPct ?? 8;
+                          updateActiveCrop({ criticalThreshold: updated, warningThreshold: Math.max(updated + leadBuffer, activeCrop.warningThreshold) });
+                        }}
+                        className="px-2 py-1 text-xs font-bold rounded-lg bg-white border border-rose-200 hover:bg-rose-100 text-rose-700 transition-colors cursor-pointer shadow-2xs"
+                        title="Increase Alert Threshold by 0.5%"
+                      >
+                        +0.5%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = Math.min(45, Math.round((activeCrop.criticalThreshold + 1.0) * 10) / 10);
+                          const leadBuffer = activeCrop.alertLeadBufferPct ?? 8;
+                          updateActiveCrop({ criticalThreshold: updated, warningThreshold: Math.max(updated + leadBuffer, activeCrop.warningThreshold) });
+                        }}
+                        className="px-2 py-1 text-xs font-bold rounded-lg bg-white border border-rose-200 hover:bg-rose-100 text-rose-700 transition-colors cursor-pointer shadow-2xs"
+                        title="Increase Alert Threshold by 1.0%"
+                      >
+                        +1.0%
+                      </button>
+                    </div>
+
+                    {/* Agronomic Presets */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[11px] font-bold text-slate-600 mr-1">Presets:</span>
+                      {[
+                        { label: 'Drought Hardy', val: 18 },
+                        { label: 'FAO Standard', val: 24 },
+                        { label: 'Yield Guard', val: 28 },
+                        { label: 'Seedling Care', val: 34 }
+                      ].map(preset => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => {
+                            const leadBuffer = activeCrop.alertLeadBufferPct ?? 8;
+                            updateActiveCrop({ criticalThreshold: preset.val, warningThreshold: preset.val + leadBuffer });
+                          }}
+                          className={`px-2 py-0.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                            Math.abs(activeCrop.criticalThreshold - preset.val) < 0.3
+                              ? 'bg-rose-600 text-white border-rose-600 font-bold shadow-2xs'
+                              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          {preset.label} ({preset.val}%)
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Interactive Monitored Zone Needles on the Slider Track */}
+                  {activeCropZonesEvaluation.length > 0 && (
+                    <div className="mt-3 p-3 rounded-xl bg-white/90 border border-rose-200/80 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                          <Activity className="w-3.5 h-3.5 text-rose-600" />
+                          Live Field Zones vs. This Tuned Alert Threshold:
+                        </span>
+                        <span className="text-[11px] text-slate-500">
+                          Threshold: <strong>{Number(activeCrop.criticalThreshold).toFixed(1)}%</strong>
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                        {activeCropZonesEvaluation.map(({ zone, effectiveMoisture, isBreachingCritical, margin }) => (
+                          <div
+                            key={zone.id}
+                            className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 transition-all ${
+                              isBreachingCritical
+                                ? 'bg-rose-50 border-rose-300 text-rose-950'
+                                : 'bg-slate-50 border-slate-200 text-slate-800'
+                            }`}
+                          >
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-xs">{zone.name}</span>
+                                <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md uppercase ${
+                                  isBreachingCritical ? 'bg-rose-500 text-white animate-pulse' : 'bg-emerald-100 text-emerald-800'
+                                }`}>
+                                  {isBreachingCritical ? 'ALERT BREACH' : 'SAFE'}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 mt-0.5">
+                                Current: <strong className={isBreachingCritical ? 'text-rose-600 font-bold' : 'text-slate-800'}>{effectiveMoisture}%</strong> · {margin >= 0 ? `+${margin}% buffer above cutoff` : `${margin}% below threshold`}
+                              </p>
+                            </div>
+
+                            {isBreachingCritical && (
+                              <button
+                                type="button"
+                                onClick={() => handleSendTestPushNotification(activeCrop)}
+                                className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-bold shrink-0 transition-colors cursor-pointer"
+                              >
+                                Test Push
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ------------------------------------------------------------------------- */}
+                {/* 2. ADVISORY WARNING LEAD BUFFER SLIDER                                    */}
+                {/* ------------------------------------------------------------------------- */}
+                <div className="bg-amber-50/60 p-4.5 rounded-2xl border border-amber-200/90 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <div className="p-2 rounded-xl bg-amber-500 text-white shrink-0 mt-0.5">
+                        <AlertTriangle className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-amber-950 uppercase tracking-wider">
+                            Early Warning Push Notification Lead Buffer
+                          </span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-200 text-amber-800">
+                            Advisory Advance
+                          </span>
+                        </div>
+                        <p className="text-xs text-amber-800/90 mt-0.5">
+                          Dispatches an early advisory push alert before soil reaches critical root damage, giving staff time to inspect irrigation solenoids.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-left sm:text-right shrink-0">
+                      <div className="flex items-baseline sm:justify-end gap-1">
+                        <span className="text-2xl font-bold text-amber-700 font-mono">
+                          +{activeCrop.alertLeadBufferPct ?? 8}%
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-amber-800 font-medium block">
+                        Advisory Alert fires at: <strong>{Number(activeCrop.criticalThreshold + (activeCrop.alertLeadBufferPct ?? 8)).toFixed(1)}% VWC</strong>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 pt-1">
+                    <input
+                      type="range"
+                      min="2"
+                      max="15"
+                      step="1"
+                      value={activeCrop.alertLeadBufferPct ?? 8}
+                      onChange={(e) => {
+                        const buffer = Number(e.target.value);
+                        updateActiveCrop({
+                          alertLeadBufferPct: buffer,
+                          warningThreshold: Number(activeCrop.criticalThreshold) + buffer
+                        });
+                      }}
+                      className="w-full accent-amber-500 cursor-pointer h-2 bg-amber-200 rounded-lg"
+                    />
+
+                    <div className="flex justify-between text-[10px] text-amber-700/80 font-medium">
+                      <span>+2% (Tight Warning)</span>
+                      <span>Standard Lead Buffer: +8%</span>
+                      <span>+15% (Ultra-Early Notice)</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-amber-200/60">
+                    <span className="text-slate-600 text-[11px]">Buffer Micro-Tuning:</span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const current = activeCrop.alertLeadBufferPct ?? 8;
+                          const next = Math.max(2, current - 1);
+                          updateActiveCrop({ alertLeadBufferPct: next, warningThreshold: activeCrop.criticalThreshold + next });
+                        }}
+                        className="px-2 py-0.5 rounded-lg border border-amber-300 bg-white text-xs font-bold text-amber-800 hover:bg-amber-100 transition-colors"
+                      >
+                        -1%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const current = activeCrop.alertLeadBufferPct ?? 8;
+                          const next = Math.min(15, current + 1);
+                          updateActiveCrop({ alertLeadBufferPct: next, warningThreshold: activeCrop.criticalThreshold + next });
+                        }}
+                        className="px-2 py-0.5 rounded-lg border border-amber-300 bg-white text-xs font-bold text-amber-800 hover:bg-amber-100 transition-colors"
+                      >
+                        +1%
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                {/* 3. Optimal Target Moisture (Field Capacity) Slider */}
-                <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/80 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Droplets className="w-4 h-4 text-emerald-600" />
+                {/* ------------------------------------------------------------------------- */}
+                {/* 3. SUSTAINED BREACH WINDOW SLIDER (NOISE FILTER / HYSTERESIS)             */}
+                {/* ------------------------------------------------------------------------- */}
+                <div className="bg-slate-50 p-4.5 rounded-2xl border border-slate-200 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <div className="p-2 rounded-xl bg-sky-600 text-white shrink-0 mt-0.5">
+                        <Clock className="w-4 h-4" />
+                      </div>
                       <div>
-                        <span className="text-xs font-bold text-emerald-950">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                            Sustained Breach Window (Noise Filter / Hysteresis)
+                          </span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-100 text-sky-800">
+                            False Alarm Filter
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 mt-0.5">
+                          Requires soil moisture to remain under the Alert Threshold continuously before dispatching push notification, filtering transient sensor blips.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-left sm:text-right shrink-0">
+                      <span className="text-xl font-bold text-sky-700 font-mono">
+                        {(activeCrop.alertHysteresisMinutes ?? 5) === 0 ? '0m (Instant)' : `${activeCrop.alertHysteresisMinutes ?? 5} min delay`}
+                      </span>
+                      <span className="text-[11px] text-slate-500 block">
+                        {(activeCrop.alertHysteresisMinutes ?? 5) === 0 ? 'Immediate push on detection' : 'Sustained verification window'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 pt-1">
+                    <input
+                      type="range"
+                      min="0"
+                      max="30"
+                      step="5"
+                      value={activeCrop.alertHysteresisMinutes ?? 5}
+                      onChange={(e) => updateActiveCrop({ alertHysteresisMinutes: Number(e.target.value) })}
+                      className="w-full accent-sky-600 cursor-pointer h-2 bg-slate-200 rounded-lg"
+                    />
+
+                    <div className="flex justify-between text-[10px] text-slate-500 font-medium">
+                      <span>0m (Instant Alert)</span>
+                      <span>5m (Recommended Standard)</span>
+                      <span>15m</span>
+                      <span>30m (Max Delay)</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ------------------------------------------------------------------------- */}
+                {/* 4. OPTIMAL TARGET MOISTURE (FIELD CAPACITY) SLIDER                        */}
+                {/* ------------------------------------------------------------------------- */}
+                <div className="bg-emerald-50/50 p-4.5 rounded-2xl border border-emerald-200/80 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-xl bg-emerald-600 text-white shrink-0">
+                        <Droplets className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-emerald-950 uppercase tracking-wider">
                           Optimal Target Moisture (Field Capacity)
                         </span>
-                        <p className="text-[11px] text-emerald-700/80">
+                        <p className="text-xs text-emerald-700/80">
                           Ideal saturation target for complete nutrient uptake without root anaerobic stress.
                         </p>
                       </div>
                     </div>
+
                     <div className="text-right">
-                      <span className="text-lg font-bold text-emerald-700">{activeCrop.targetMoisture}%</span>
+                      <span className="text-2xl font-bold text-emerald-700 font-mono">{activeCrop.targetMoisture}%</span>
                     </div>
                   </div>
 
                   <input
                     type="range"
-                    min={activeCrop.warningThreshold + 2}
+                    min={Math.max(25, (activeCrop.warningThreshold || activeCrop.criticalThreshold + 6) + 2)}
                     max="75"
                     step="1"
                     value={activeCrop.targetMoisture}
                     onChange={(e) => updateActiveCrop({ targetMoisture: Number(e.target.value) })}
-                    className="w-full accent-emerald-600 cursor-pointer"
+                    className="w-full accent-emerald-600 cursor-pointer h-2 bg-emerald-200 rounded-lg"
                   />
                   <div className="flex justify-between text-[10px] text-emerald-600/80 font-medium">
-                    <span>{activeCrop.warningThreshold + 2}%</span>
+                    <span>{Math.max(25, (activeCrop.warningThreshold || activeCrop.criticalThreshold + 6) + 2)}%</span>
                     <span>Full Field Capacity</span>
-                    <span>75% (Maximum)</span>
+                    <span>75% (Saturation Limit)</span>
                   </div>
                 </div>
-              </div>
 
-              {/* Notification & Automated Valve Response Configuration */}
-              <div className="pt-4 border-t border-slate-100 space-y-3">
-                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <Bell className="w-3.5 h-3.5 text-indigo-600" />
-                  Proactive Trigger & Automated Response Actions
-                </h4>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Toggle 1: Proactive Critical Notifications */}
-                  <label className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors cursor-pointer bg-slate-50/50">
-                    <input
-                      type="checkbox"
-                      checked={activeCrop.notifyOnCritical}
-                      onChange={(e) => updateActiveCrop({ notifyOnCritical: e.target.checked })}
-                      className="mt-1 rounded accent-sky-600 w-4 h-4 cursor-pointer"
-                    />
-                    <div>
-                      <span className="text-xs font-bold text-slate-800 block">Proactive Critical Alarms</span>
-                      <p className="text-[11px] text-slate-500">
-                        Dispatch high-priority push toasts and sound alerts if moisture drops &lt; {activeCrop.criticalThreshold}%.
-                      </p>
-                    </div>
-                  </label>
-
-                  {/* Toggle 2: Proactive Warning Notifications */}
-                  <label className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors cursor-pointer bg-slate-50/50">
-                    <input
-                      type="checkbox"
-                      checked={activeCrop.notifyOnWarning}
-                      onChange={(e) => updateActiveCrop({ notifyOnWarning: e.target.checked })}
-                      className="mt-1 rounded accent-sky-600 w-4 h-4 cursor-pointer"
-                    />
-                    <div>
-                      <span className="text-xs font-bold text-slate-800 block">Proactive Warning Notices</span>
-                      <p className="text-[11px] text-slate-500">
-                        Dispatch early advisories when approaching the {activeCrop.warningThreshold}% warning band.
-                      </p>
-                    </div>
-                  </label>
-
-                  {/* Toggle 3: Auto-Irrigate Emergency Valve on Critical Breach */}
-                  <label className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors cursor-pointer bg-slate-50/50 sm:col-span-2">
-                    <input
-                      type="checkbox"
-                      checked={activeCrop.autoIrrigateOnCritical}
-                      onChange={(e) => updateActiveCrop({ autoIrrigateOnCritical: e.target.checked })}
-                      className="mt-1 rounded accent-emerald-600 w-4 h-4 cursor-pointer"
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-800 block">
-                          Automated Valve Activation on Critical Breach
-                        </span>
-                        {activeCrop.autoIrrigateOnCritical && (
-                          <div className="flex items-center gap-1.5 text-xs text-slate-600" onClick={(e) => e.stopPropagation()}>
-                            <Clock className="w-3 h-3 text-slate-400" />
-                            <span>Soak Duration:</span>
-                            <select
-                              value={activeCrop.autoEmergencyDurationMinutes}
-                              onChange={(e) => updateActiveCrop({ autoEmergencyDurationMinutes: Number(e.target.value) })}
-                              className="px-2 py-0.5 border border-slate-200 rounded-lg text-xs font-semibold bg-white cursor-pointer"
-                            >
-                              <option value="10">10 mins</option>
-                              <option value="15">15 mins</option>
-                              <option value="20">20 mins</option>
-                              <option value="25">25 mins</option>
-                              <option value="30">30 mins</option>
-                            </select>
-                          </div>
-                        )}
+                {/* ------------------------------------------------------------------------- */}
+                {/* 5. LIVE PROACTIVE PUSH NOTIFICATION SIMULATOR & PREVIEW CARD              */}
+                {/* ------------------------------------------------------------------------- */}
+                <div className="bg-gradient-to-br from-slate-900 via-slate-850 to-slate-950 text-white p-5 rounded-2xl border border-slate-700/80 space-y-4 shadow-lg">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-1.5 rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30">
+                        <Smartphone className="w-4 h-4" />
                       </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        If soil moisture dips below {activeCrop.criticalThreshold}%, automatically open the corresponding solenoid valve for {activeCrop.autoEmergencyDurationMinutes} minutes without waiting for scheduled cycles.
+                      <div>
+                        <h5 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
+                          Proactive Push Notification Preview
+                        </h5>
+                        <p className="text-[11px] text-slate-400">
+                          Live mobile & desktop notification rendering for your tuned threshold.
+                        </p>
+                      </div>
+                    </div>
+
+                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                      APNs / FCM Channel Active
+                    </span>
+                  </div>
+
+                  {/* Simulated Mobile / System Push Notification Bubble */}
+                  <div className="bg-slate-800/90 border border-slate-700 p-4 rounded-xl space-y-2.5 relative overflow-hidden backdrop-blur-xs">
+                    <div className="flex items-center justify-between text-xs text-slate-400">
+                      <div className="flex items-center gap-2 font-semibold text-slate-300">
+                        <div className="w-4 h-4 rounded-md bg-gradient-to-tr from-sky-500 to-emerald-400 flex items-center justify-center text-[9px] font-black text-slate-950">
+                          C
+                        </div>
+                        <span>Claire Agri-OS · Smart Irrigation</span>
+                      </div>
+                      <span className="text-[11px] text-slate-400">Just now</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="text-xs font-bold text-rose-300 flex items-center gap-1.5">
+                        <BellRing className="w-3.5 h-3.5 text-rose-400 shrink-0 animate-bounce" />
+                        <span>PROACTIVE PUSH ALERT: Critical Moisture Drop in {activeCropZones[0]?.name || activeCrop.cropName + ' Field'}</span>
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        Tensiometer detected <strong className="text-rose-400 font-bold">{Math.max(8, Number((activeCrop.criticalThreshold - 2.4).toFixed(1)))}% VWC</strong>, falling below your fine-tuned Alert Threshold of <strong className="text-white font-bold">{activeCrop.criticalThreshold.toFixed(1)}%</strong>. Immediate root stress risk. {activeCrop.autoIrrigateOnCritical ? `Automated ${activeCrop.autoEmergencyDurationMinutes}m emergency soak armed.` : 'Manual irrigation recommended.'}
                       </p>
                     </div>
-                  </label>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2.5 border-t border-slate-700/80">
+                      <div className="flex items-center gap-2 text-[11px]">
+                        <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 font-bold uppercase text-[10px] border border-rose-500/30">
+                          Priority: {activeCrop.alertPriority || 'Urgent'}
+                        </span>
+                        <span className="text-slate-400">
+                          Filter: {activeCrop.alertHysteresisMinutes ?? 5}m sustained
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSendTestPushNotification(activeCrop)}
+                        className="px-3.5 py-1.5 bg-gradient-to-r from-sky-500 to-teal-400 hover:from-sky-400 hover:to-teal-300 text-slate-950 font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer group"
+                      >
+                        <Send className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                        <span>Dispatch Test Push Now</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
+
+                {/* ------------------------------------------------------------------------- */}
+                {/* 6. PROACTIVE PUSH PROTOCOL & VALVE LINK SETTINGS                          */}
+                {/* ------------------------------------------------------------------------- */}
+                <div className="pt-2 border-t border-slate-100 space-y-3">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Bell className="w-3.5 h-3.5 text-indigo-600" />
+                    Proactive Alert Protocol & Automated Valve Response
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Toggle 1: Proactive Critical Push Notifications */}
+                    <label className="flex items-start gap-3 p-3.5 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors cursor-pointer bg-slate-50/60">
+                      <input
+                        type="checkbox"
+                        checked={activeCrop.notifyOnCritical}
+                        onChange={(e) => updateActiveCrop({ notifyOnCritical: e.target.checked })}
+                        className="mt-1 rounded accent-sky-600 w-4 h-4 cursor-pointer"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-800 block">Proactive Critical Push Alarms</span>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Dispatch high-priority push notifications and in-app system toasts when moisture &lt; {activeCrop.criticalThreshold.toFixed(1)}%.
+                        </p>
+                      </div>
+                    </label>
+
+                    {/* Toggle 2: Proactive Warning Notifications */}
+                    <label className="flex items-start gap-3 p-3.5 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors cursor-pointer bg-slate-50/60">
+                      <input
+                        type="checkbox"
+                        checked={activeCrop.notifyOnWarning}
+                        onChange={(e) => updateActiveCrop({ notifyOnWarning: e.target.checked })}
+                        className="mt-1 rounded accent-sky-600 w-4 h-4 cursor-pointer"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-800 block">Proactive Early Advisories</span>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Send early advisory notifications when entering the +{activeCrop.alertLeadBufferPct ?? 8}% buffer window.
+                        </p>
+                      </div>
+                    </label>
+
+                    {/* Toggle 3: Audible Siren / Sound */}
+                    <label className="flex items-start gap-3 p-3.5 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors cursor-pointer bg-slate-50/60">
+                      <input
+                        type="checkbox"
+                        checked={activeCrop.pushSoundEnabled ?? true}
+                        onChange={(e) => updateActiveCrop({ pushSoundEnabled: e.target.checked })}
+                        className="mt-1 rounded accent-sky-600 w-4 h-4 cursor-pointer"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          {activeCrop.pushSoundEnabled ? <Volume2 className="w-3.5 h-3.5 text-sky-600" /> : <VolumeX className="w-3.5 h-3.5 text-slate-400" />}
+                          Audible Chime on Alert Breach
+                        </span>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Sound audible warning chime when high-priority push notifications fire.
+                        </p>
+                      </div>
+                    </label>
+
+                    {/* Priority Selector */}
+                    <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 flex flex-col justify-between">
+                      <div>
+                        <span className="text-xs font-bold text-slate-800 block">Push Notification Urgency Level</span>
+                        <p className="text-[11px] text-slate-500 mt-0.5">Controls delivery priority and bypass settings.</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-2">
+                        {(['urgent', 'high', 'standard'] as const).map(lvl => (
+                          <button
+                            key={lvl}
+                            type="button"
+                            onClick={() => updateActiveCrop({ alertPriority: lvl })}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase transition-colors cursor-pointer ${
+                              (activeCrop.alertPriority || 'urgent') === lvl
+                                ? 'bg-slate-900 text-white shadow-2xs'
+                                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                            }`}
+                          >
+                            {lvl}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Toggle 5: Auto-Irrigate Emergency Valve on Critical Breach */}
+                    <label className="flex items-start gap-3 p-3.5 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors cursor-pointer bg-slate-50/60 sm:col-span-2">
+                      <input
+                        type="checkbox"
+                        checked={activeCrop.autoIrrigateOnCritical}
+                        onChange={(e) => updateActiveCrop({ autoIrrigateOnCritical: e.target.checked })}
+                        className="mt-1 rounded accent-emerald-600 w-4 h-4 cursor-pointer"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <span className="text-xs font-bold text-slate-800 block">
+                            Automated Valve Activation on Critical Breach
+                          </span>
+                          {activeCrop.autoIrrigateOnCritical && (
+                            <div className="flex items-center gap-1.5 text-xs text-slate-600" onClick={(e) => e.stopPropagation()}>
+                              <Clock className="w-3.5 h-3.5 text-slate-400" />
+                              <span className="font-semibold">Soak Duration:</span>
+                              <select
+                                value={activeCrop.autoEmergencyDurationMinutes}
+                                onChange={(e) => updateActiveCrop({ autoEmergencyDurationMinutes: Number(e.target.value) })}
+                                className="px-2 py-0.5 border border-slate-200 rounded-lg text-xs font-semibold bg-white cursor-pointer"
+                              >
+                                <option value="10">10 mins</option>
+                                <option value="15">15 mins</option>
+                                <option value="20">20 mins</option>
+                                <option value="25">25 mins</option>
+                                <option value="30">30 mins</option>
+                              </select>
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          If soil moisture dips below {Number(activeCrop.criticalThreshold).toFixed(1)}%, automatically open the corresponding solenoid valve for {activeCrop.autoEmergencyDurationMinutes} minutes synchronously with the push notification.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
               </div>
 
               {/* Save Confirmation Bar */}

@@ -2800,6 +2800,314 @@ app.get('/api/vertex/public-data/feeds', (req, res) => {
   });
 });
 
+// ==========================================================================
+// CROP GROWTH PREDICTION & MATURITY TIMELINE ENGINE (GEMINI-POWERED)
+// ==========================================================================
+app.post('/api/crop-growth/predict', async (req: Request, res: Response) => {
+  const {
+    cropName = 'Maize',
+    cropVariety = 'Highland Hybrid',
+    plantingDate,
+    location = 'Nairobi',
+    weather = null,
+    soilType = 'Clay Loam',
+    irrigationType = 'Drip Irrigation',
+    fieldNotes = ''
+  } = req.body;
+
+  // Validate or default planting date
+  const now = new Date();
+  let validPlantingDate = plantingDate;
+  if (!validPlantingDate) {
+    const defaultDate = new Date();
+    defaultDate.setDate(defaultDate.getDate() - 35); // 35 days ago default
+    validPlantingDate = defaultDate.toISOString().split('T')[0];
+  }
+
+  const pDate = new Date(validPlantingDate);
+  const diffTime = Math.max(0, now.getTime() - pDate.getTime());
+  const daysSincePlanting = Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+
+  // Extract current telemetry
+  const ambientTemp = weather?.temp ?? 24;
+  const ambientHumidity = weather?.humidity ?? 65;
+  const soilMoisture = weather?.soilMoisture ?? 28;
+  const soilTemp = weather?.soilTemp ?? 22;
+  const dayCondition = weather?.dayType ?? 'Partly Cloudy';
+  const windSpeed = weather?.windSpeed ?? 12;
+
+  // Base GDD estimation (Tbase: 10°C for warm crops, 5°C for cool crops)
+  const isCoolCrop = ['Wheat', 'Barley', 'Peas', 'Cabbage', 'Canola'].some(c => cropName.toLowerCase().includes(c.toLowerCase()));
+  const tBase = isCoolCrop ? 5 : 10;
+  const avgDailyEffTemp = Math.max(0, ambientTemp - tBase);
+  const currentAccumulatedGdd = Math.round(daysSincePlanting * (avgDailyEffTemp > 0 ? avgDailyEffTemp : 12));
+
+  // Build system prompt for Gemini
+  const prompt = `You are Claire.ai's Principal Agricultural Phenology and Crop Modeling Engine.
+Leverage crop simulation science (FAO-56, DSSAT, APSIM) and current climate telemetry to generate a high-precision Crop Maturity Timeline and Growth Prediction.
+
+INPUT AGRONOMIC DATA:
+- Crop Species: ${cropName}
+- Variety / Cultivar: ${cropVariety}
+- Actual Planting Date: ${validPlantingDate} (Days elapsed since planting: ${daysSincePlanting} days)
+- Current Date: ${now.toISOString().split('T')[0]}
+- Location: ${location}
+- Soil Matrix: ${soilType}
+- Water Management: ${irrigationType}
+- Live Microclimate Telemetry:
+  * Air Temp: ${ambientTemp}°C
+  * Relative Humidity: ${ambientHumidity}%
+  * Soil Temperature (0-10cm): ${soilTemp}°C
+  * Topsoil Volumetric Moisture: ${soilMoisture}% VWC
+  * Canopy Wind Speed: ${windSpeed} km/h
+  * Current Sky/Weather Condition: ${dayCondition}
+- Farmer Field Notes: ${fieldNotes || 'Standard commercial cultivation practice'}
+
+REQUIREMENTS:
+1. Model the complete phenological lifecycle into 5 distinct sequential stages:
+   - Initial / Germination & Seedling Emergence
+   - Crop Development / Vegetative Canopy Expansion
+   - Mid-Season / Flowering, Anthesis & Tasseling/Silking/Fruit Set
+   - Late Season / Grain Filling, Pod/Fruit Maturation & Color Break
+   - Harvest Maturity / Physiological Ripening & Moisture Dry-down
+2. Calculate the expected day intervals, accumulated GDD (Growing Degree Days, base ${tBase}°C), biomass %, canopy cover %, and FAO Kc factor for each stage.
+3. Compare ${daysSincePlanting} days elapsed against the stages: mark completed stages as "completed", current active stage as "current", and future stages as "upcoming".
+4. Determine the exact projected harvest date, plus an early harvest and late harvest buffer window.
+5. Provide quantitative Climate Adjustment Factors analyzing how current microclimate (e.g. ambient temp ${ambientTemp}°C, soil moisture ${soilMoisture}% VWC, humidity ${ambientHumidity}%) accelerates or delays maturity compared to standard regional benchmarks.
+6. Return a comprehensive, actionable Agronomist Synthesis.
+
+OUTPUT FORMAT:
+Return ONLY a valid JSON object matching this exact schema (no markdown fences, no preamble):
+{
+  "totalMaturityDays": 115,
+  "estimatedHarvestDate": "YYYY-MM-DD",
+  "currentStageIndex": 1,
+  "currentStageName": "Vegetative Expansion (V6-V8)",
+  "currentStageProgressPct": 68,
+  "overallMaturityProgressPct": 30,
+  "accumulatedGdd": ${currentAccumulatedGdd},
+  "projectedTotalGdd": 1650,
+  "gddPaceAssessment": "on_schedule" | "ahead" | "delayed",
+  "confidenceScore": 92,
+  "harvestWindow": {
+    "earlyDate": "YYYY-MM-DD",
+    "optimalDate": "YYYY-MM-DD",
+    "lateDate": "YYYY-MM-DD"
+  },
+  "stages": [
+    {
+      "stageName": "Stage name with agronomic designation",
+      "stageCode": "V0-VE" | "V1-V8" | "R1-R2" | "R3-R5" | "R6",
+      "faoStage": "Initial" | "Crop Development" | "Mid-Season" | "Late Season" | "Harvest Maturity",
+      "dayStart": 0,
+      "dayEnd": 14,
+      "estimatedDate": "YYYY-MM-DD",
+      "gddAccumulated": 180,
+      "biomassPct": 8,
+      "canopyCoverPct": 15,
+      "kcFactor": 0.40,
+      "status": "completed" | "current" | "upcoming",
+      "waterRequirementMm": 2.5,
+      "criticalNutrients": ["Phosphorus", "Zinc"],
+      "keyRisks": ["Crusting", "Seed rot"],
+      "fieldActionTips": ["Ensure soil moisture > 22%", "Check emergence uniformity"]
+    }
+  ],
+  "climateAdjustments": [
+    {
+      "parameter": "Ambient Temperature",
+      "observedValue": "${ambientTemp}°C",
+      "baselineNormal": "22.5°C",
+      "impactOnMaturity": "-3 days acceleration",
+      "severity": "favorable" | "warning" | "critical" | "neutral",
+      "explanation": "Elevated thermal units accelerate vegetative internode elongation."
+    }
+  ],
+  "yieldExpectation": {
+    "projectedYieldTonsHa": 5.4,
+    "baselineYieldTonsHa": 4.8,
+    "variancePct": 12.5,
+    "limitingFactor": "Nitrogen leaching risk during seasonal rains"
+  },
+  "aiAgronomistSynthesis": {
+    "summary": "2-3 crisp sentences summarizing current maturity velocity, plant vigor, and climatic readiness.",
+    "irrigationStrategy": "Clear guidance on soil moisture targets during current stage.",
+    "pestDiseaseVulnerability": "Specific scouting alert for pathogens matching this growth stage and current humidity.",
+    "harvestReadinessIndicators": ["Indicator 1", "Indicator 2", "Indicator 3"],
+    "immediateActionItem": "Top priority agronomic action the grower should execute this week."
+  }
+}`;
+
+  try {
+    const ai = getGenAIClient();
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json'
+      }
+    });
+
+    if (response && response.text) {
+      const parsed = JSON.parse(response.text);
+      return res.json({
+        success: true,
+        data: {
+          id: `pred_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+          cropName,
+          cropVariety,
+          plantingDate: validPlantingDate,
+          currentDate: now.toISOString().split('T')[0],
+          daysSincePlanting,
+          ...parsed,
+          generatedAt: now.toISOString(),
+          locationName: location,
+          isAiGenerated: true
+        }
+      });
+    }
+  } catch (error: any) {
+    console.warn('[Crop Growth Prediction Gemini API] Falling back to robust agronomic deterministic model:', error?.message || error);
+  }
+
+  // Robust Agronomic Fallback Model (deterministic science-based calculation)
+  const isMaize = cropName.toLowerCase().includes('maize') || cropName.toLowerCase().includes('corn');
+  const isWheat = cropName.toLowerCase().includes('wheat');
+  const isTomato = cropName.toLowerCase().includes('tomato');
+  const isBean = cropName.toLowerCase().includes('bean') || cropName.toLowerCase().includes('legume');
+
+  let totalDays = 110;
+  if (isWheat) totalDays = 125;
+  if (isTomato) totalDays = 85;
+  if (isBean) totalDays = 70;
+
+  const harvestDateObj = new Date(pDate);
+  harvestDateObj.setDate(harvestDateObj.getDate() + totalDays);
+  const harvestDateStr = harvestDateObj.toISOString().split('T')[0];
+
+  const earlyDateObj = new Date(harvestDateObj);
+  earlyDateObj.setDate(earlyDateObj.getDate() - 5);
+  const lateDateObj = new Date(harvestDateObj);
+  lateDateObj.setDate(lateDateObj.getDate() + 7);
+
+  const stageDefs = [
+    { name: 'Emergence & Establishment', code: 'V0-VE', fao: 'Initial', pct: 0.12, kc: 0.4, gdd: 160, water: 2.2, n: ['Phosphorus', 'Zinc'], r: ['Damping-off', 'Cutworms'] },
+    { name: 'Vegetative Canopy Expansion', code: 'V4-V8', fao: 'Crop Development', pct: 0.28, kc: 0.8, gdd: 420, water: 4.5, n: ['Nitrogen', 'Sulfur'], r: ['Stem borers', 'Armyworm'] },
+    { name: 'Flowering & Pollination / Anthesis', code: 'VT-R1', fao: 'Mid-Season', pct: 0.25, kc: 1.15, gdd: 400, water: 6.8, n: ['Potassium', 'Boron'], r: ['Heat sterility', 'Rust'] },
+    { name: 'Grain / Fruit Filling & Sizing', code: 'R2-R4', fao: 'Late Season', pct: 0.23, kc: 0.95, gdd: 380, water: 5.2, n: ['Magnesium', 'Potassium'], r: ['Kernel blight', 'Aphids'] },
+    { name: 'Physiological Maturity & Dry-Down', code: 'R5-R6', fao: 'Harvest Maturity', pct: 0.12, kc: 0.6, gdd: 200, water: 2.8, n: ['Calcium'], r: ['Lodging', 'Ear rot'] },
+  ];
+
+  let cumulativeDay = 0;
+  let currentStageIdx = 0;
+  const stagesResult = stageDefs.map((st, idx) => {
+    const stageDuration = Math.round(totalDays * st.pct);
+    const start = cumulativeDay;
+    const end = cumulativeDay + stageDuration;
+    cumulativeDay = end;
+
+    let status: 'completed' | 'current' | 'upcoming' = 'upcoming';
+    if (daysSincePlanting >= end) {
+      status = 'completed';
+    } else if (daysSincePlanting >= start && daysSincePlanting < end) {
+      status = 'current';
+      currentStageIdx = idx;
+    }
+
+    const stDate = new Date(pDate);
+    stDate.setDate(stDate.getDate() + end);
+
+    return {
+      stageName: st.name,
+      stageCode: st.code,
+      faoStage: st.fao as any,
+      dayStart: start,
+      dayEnd: end,
+      estimatedDate: stDate.toISOString().split('T')[0],
+      gddAccumulated: st.gdd,
+      biomassPct: Math.min(100, Math.round((end / totalDays) * 98)),
+      canopyCoverPct: Math.min(100, Math.round((idx + 1) * 20)),
+      kcFactor: st.kc,
+      status,
+      waterRequirementMm: st.water,
+      criticalNutrients: st.n,
+      keyRisks: st.r,
+      fieldActionTips: [
+        `Maintain active rootzone VWC above ${st.water > 5 ? '32%' : '24%'}`,
+        `Scout field twice weekly for ${st.r[0]}`
+      ]
+    };
+  });
+
+  const overallProgress = Math.min(100, Math.round((daysSincePlanting / totalDays) * 100));
+
+  res.json({
+    success: true,
+    data: {
+      id: `pred_fb_${Date.now()}`,
+      cropName,
+      cropVariety,
+      plantingDate: validPlantingDate,
+      currentDate: now.toISOString().split('T')[0],
+      daysSincePlanting,
+      totalMaturityDays: totalDays,
+      estimatedHarvestDate: harvestDateStr,
+      currentStageIndex: currentStageIdx,
+      currentStageName: stagesResult[currentStageIdx]?.stageName || 'Active Growth',
+      currentStageProgressPct: Math.min(100, Math.round(((daysSincePlanting - stagesResult[currentStageIdx].dayStart) / Math.max(1, stagesResult[currentStageIdx].dayEnd - stagesResult[currentStageIdx].dayStart)) * 100)),
+      overallMaturityProgressPct: overallProgress,
+      accumulatedGdd: currentAccumulatedGdd,
+      projectedTotalGdd: 1560,
+      gddPaceAssessment: ambientTemp > 23 ? 'ahead' : 'on_schedule',
+      confidenceScore: 88,
+      harvestWindow: {
+        earlyDate: earlyDateObj.toISOString().split('T')[0],
+        optimalDate: harvestDateStr,
+        lateDate: lateDateObj.toISOString().split('T')[0]
+      },
+      stages: stagesResult,
+      climateAdjustments: [
+        {
+          parameter: 'Thermal Accumulation (Air Temp)',
+          observedValue: `${ambientTemp}°C`,
+          baselineNormal: '21.0°C',
+          impactOnMaturity: ambientTemp > 21 ? '-2 days acceleration' : '0 days on target',
+          severity: 'favorable',
+          explanation: 'Favorable daytime thermal units accelerate leaf emergence and photosynthesis.'
+        },
+        {
+          parameter: 'Topsoil Volumetric Moisture',
+          observedValue: `${soilMoisture}% VWC`,
+          baselineNormal: '30.0% VWC',
+          impactOnMaturity: soilMoisture < 22 ? '+4 days delay (water stress)' : 'Optimal rate',
+          severity: soilMoisture < 22 ? 'warning' : 'favorable',
+          explanation: 'Adequate moisture prevents stoma closure and sustains uninterrupted cell division.'
+        }
+      ],
+      yieldExpectation: {
+        projectedYieldTonsHa: isMaize ? 5.2 : isTomato ? 21.0 : isWheat ? 4.6 : 2.5,
+        baselineYieldTonsHa: isMaize ? 4.8 : isTomato ? 18.5 : isWheat ? 4.2 : 2.2,
+        variancePct: 8.3,
+        limitingFactor: 'Soil nitrogen top-dressing timing'
+      },
+      aiAgronomistSynthesis: {
+        summary: `${cropName} (${cropVariety}) planted on ${validPlantingDate} has completed ${daysSincePlanting} days of development (${overallProgress}% maturity reached). Phenological progression is on schedule toward expected harvest in ${harvestDateStr}.`,
+        irrigationStrategy: `Maintain steady soil moisture between 26% and 34% VWC. Prevent sudden drying cycles during critical developmental transitions.`,
+        pestDiseaseVulnerability: `Current humidity of ${ambientHumidity}% combined with ${ambientTemp}°C temperatures warrants elevated scouting for foliar blights and stem-boring larvae.`,
+        harvestReadinessIndicators: [
+          'Visual black layer formation or seed pod desiccation',
+          'Grain/kernel moisture dropping below 15.5%',
+          'Canopy senescence progressing to 85% yellow/brown'
+        ],
+        immediateActionItem: `Verify rootzone moisture and apply balanced top-dressing formulation before entering next reproductive phase.`
+      },
+      generatedAt: now.toISOString(),
+      locationName: location,
+      isAiGenerated: false
+    }
+  });
+});
+
 // Global Error Handler to guarantee no internal server traces or secrets are exposed
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   console.error('[Unhandled Internal Error]', err?.message || err);
