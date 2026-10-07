@@ -339,3 +339,19 @@ export interface IrrigationTriggerLog {
   litersDelivered: number;
 }
 
+export interface CropMoistureThreshold {
+  cropId: string;
+  cropName: string;
+  category: 'grain' | 'legume' | 'fruit' | 'nursery' | 'vegetable';
+  criticalThreshold: number; // Moisture % below which irreversible root stress occurs
+  warningThreshold: number;  // Moisture % for proactive warning notification
+  targetMoisture: number;    // Target moisture % for field capacity
+  autoIrrigateOnCritical: boolean; // Automatically trigger zone valve when critical breach occurs
+  autoEmergencyDurationMinutes: number;
+  notifyOnCritical: boolean; // Send proactive high-priority notification
+  notifyOnWarning: boolean;  // Send proactive advisory notification
+  rootDepthCm: number;
+  faoReferenceStage: string;
+  lastAlertSentAt?: number;
+}
+

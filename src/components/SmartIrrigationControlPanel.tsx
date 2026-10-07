@@ -23,12 +23,14 @@ import {
   Sparkles,
   ArrowRight,
   RotateCcw,
-  Activity
+  Activity,
+  Sprout
 } from 'lucide-react';
 import { WeatherData, IrrigationZone, IrrigationSchedule, showToast } from '../types';
 import AutomatedSchedulingSubPanel from './AutomatedSchedulingSubPanel';
 import SoilMoistureHistoryChart from './SoilMoistureHistoryChart';
 import IrrigationEfficiencySummaryCard from './IrrigationEfficiencySummaryCard';
+import CropMoistureThresholdConfig from './CropMoistureThresholdConfig';
 
 interface SmartIrrigationControlPanelProps {
   weather: WeatherData;
@@ -266,7 +268,7 @@ export default function SmartIrrigationControlPanel({ weather, activeLocation }:
   });
 
   // Active view tab
-  const [activeTab, setActiveTab] = useState<'zones' | 'schedules' | 'history' | 'analytics'>('zones');
+  const [activeTab, setActiveTab] = useState<'zones' | 'schedules' | 'history' | 'analytics' | 'thresholds'>('zones');
 
   // Zones state
   const [zones, setZones] = useState<IrrigationZone[]>(() => {
@@ -666,16 +668,26 @@ export default function SmartIrrigationControlPanel({ weather, activeLocation }:
                   </div>
                 </div>
 
-                {/* Quick Action button for low moisture */}
-                {isMoistureCriticallyLow && (
+                {/* Quick Action buttons */}
+                <div className="flex items-center gap-2 shrink-0">
                   <button
-                    onClick={() => handleTriggerZone('zone-1', 20)}
-                    className="shrink-0 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors flex items-center gap-1.5"
+                    onClick={() => setActiveTab('thresholds')}
+                    className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-2xs"
                   >
-                    <Droplet className="w-3.5 h-3.5 fill-current" />
-                    Apply Recommended Soak
+                    <Sprout className="w-3.5 h-3.5 text-emerald-600" />
+                    Crop Thresholds & Alerts
                   </button>
-                )}
+
+                  {isMoistureCriticallyLow && (
+                    <button
+                      onClick={() => handleTriggerZone('zone-1', 20)}
+                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors flex items-center gap-1.5"
+                    >
+                      <Droplet className="w-3.5 h-3.5 fill-current" />
+                      Apply Recommended Soak
+                    </button>
+                  )}
+                </div>
 
               </div>
             </div>
@@ -736,6 +748,17 @@ export default function SmartIrrigationControlPanel({ weather, activeLocation }:
                 >
                   <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />
                   Water Conservation & Telemetry
+                </button>
+                <button
+                  onClick={() => setActiveTab('thresholds')}
+                  className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
+                    activeTab === 'thresholds'
+                      ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Sprout className="w-3.5 h-3.5 text-emerald-500" />
+                  Crop Moisture Thresholds & Alerts
                 </button>
               </div>
 
@@ -996,6 +1019,17 @@ export default function SmartIrrigationControlPanel({ weather, activeLocation }:
                   />
                 </div>
               </div>
+            )}
+
+            {/* Tab 5: Crop Moisture Thresholds & Proactive Notifications */}
+            {activeTab === 'thresholds' && (
+              <CropMoistureThresholdConfig
+                zones={zones}
+                weather={weather}
+                onTriggerZone={handleTriggerZone}
+                soundEnabled={soundEnabled}
+                onPlaySound={playIrrigationSound}
+              />
             )}
 
           </motion.div>
