@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { User, Project, showToast } from '../types';
-import { Folder, Plus, Calendar, Compass, Sprout, TrendingUp, ChevronRight, Loader2, AlertCircle, Trash2, X, Download, CalendarDays, CheckSquare, Square, Clock, Sparkles, Share2, Info, BarChart2, FileSpreadsheet, Upload, Brain, Zap } from 'lucide-react';
+import { User, Project, SoilRecord, showToast } from '../types';
+import { Folder, Plus, Calendar, Compass, Sprout, TrendingUp, ChevronRight, Loader2, AlertCircle, Trash2, X, Download, CalendarDays, CheckSquare, Square, Clock, Sparkles, Share2, Info, BarChart2, FileSpreadsheet, Upload, Brain, Zap, Sliders, FlaskConical, Database } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import YieldTrendsVisualization from './YieldTrendsVisualization';
 import YieldCsvImporter from './YieldCsvImporter';
 import YieldAiForecastModal from './YieldAiForecastModal';
+import ExportDataModal from './ExportDataModal';
+import { generateYieldAndSoilCsv, downloadCsvBlob } from '../utils/csvExportUtils';
 
 interface HistoricalYieldLogsProps {
   user: User;
@@ -142,6 +144,103 @@ export default function HistoricalYieldLogs({ user, projects, onProjectAdded, on
   const [showInlineCsvImporter, setShowInlineCsvImporter] = useState(false);
   const [showAiForecastModal, setShowAiForecastModal] = useState(false);
 
+  // Stateful soil health records for current user
+  const [soilRecords, setSoilRecords] = useState<SoilRecord[]>([
+    {
+      id: 'soil_1',
+      user_id: user?.id || '1',
+      fieldName: 'North Sector A',
+      location: user?.location || 'Regional Zone',
+      sampleDate: '2024-03-15',
+      crop: 'Spring Wheat',
+      soilType: 'Deep Alluvial Loam',
+      nitrogenKgHa: 280,
+      phosphorusKgHa: 18,
+      potassiumKgHa: 210,
+      organicCarbonPct: 0.68,
+      phLevel: 6.8,
+      ecDsM: 0.58,
+      moisturePct: 28.5,
+      soilTempC: 19.2,
+      healthRating: 'Good',
+      notes: 'Pre-sowing baseline soil test; balanced NPK ratio and optimal pore structure.'
+    },
+    {
+      id: 'soil_2',
+      user_id: user?.id || '1',
+      fieldName: 'Central Parcel B',
+      location: user?.location || 'Regional Zone',
+      sampleDate: '2024-07-20',
+      crop: 'Roma Tomatoes',
+      soilType: 'Black Regur Soil',
+      nitrogenKgHa: 310,
+      phosphorusKgHa: 24,
+      potassiumKgHa: 245,
+      organicCarbonPct: 0.74,
+      phLevel: 7.2,
+      ecDsM: 0.62,
+      moisturePct: 33.1,
+      soilTempC: 23.5,
+      healthRating: 'Optimal',
+      notes: 'Mid-season fertigation check; rich humus content and thriving beneficial fungi.'
+    },
+    {
+      id: 'soil_3',
+      user_id: user?.id || '1',
+      fieldName: 'South Slope Terrace',
+      location: user?.location || 'Regional Zone',
+      sampleDate: '2024-10-10',
+      crop: 'Sweet Corn',
+      soilType: 'Clay Loam',
+      nitrogenKgHa: 220,
+      phosphorusKgHa: 12,
+      potassiumKgHa: 175,
+      organicCarbonPct: 0.51,
+      phLevel: 7.6,
+      ecDsM: 0.85,
+      moisturePct: 19.8,
+      soilTempC: 24.1,
+      healthRating: 'Moderate',
+      notes: 'Post-drought survey; recommends humic acid compost amendment to boost CEC.'
+    },
+    {
+      id: 'soil_4',
+      user_id: user?.id || '1',
+      fieldName: 'East Lowland Basin',
+      location: user?.location || 'Regional Zone',
+      sampleDate: '2025-01-18',
+      crop: 'Cabbage clusters',
+      soilType: 'Sandy Clay Loam',
+      nitrogenKgHa: 295,
+      phosphorusKgHa: 21,
+      potassiumKgHa: 230,
+      organicCarbonPct: 0.62,
+      phLevel: 6.5,
+      ecDsM: 0.52,
+      moisturePct: 31.0,
+      soilTempC: 17.8,
+      healthRating: 'Good',
+      notes: 'Winter moisture retention high; vigorous earthworm channel activity detected.'
+    }
+  ]);
+  const [isSyncingSoil, setIsSyncingSoil] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [activeRecordTab, setActiveRecordTab] = useState<'yield' | 'soil'>('yield');
+
+  // Form states for adding custom soil test record
+  const [newSoilField, setNewSoilField] = useState('North Sector A');
+  const [newSoilDate, setNewSoilDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newSoilCrop, setNewSoilCrop] = useState('Spring Wheat');
+  const [newSoilType, setNewSoilType] = useState('Deep Alluvial Loam');
+  const [newSoilN, setNewSoilN] = useState('280');
+  const [newSoilP, setNewSoilP] = useState('18');
+  const [newSoilK, setNewSoilK] = useState('210');
+  const [newSoilSoc, setNewSoilSoc] = useState('0.68');
+  const [newSoilPh, setNewSoilPh] = useState('6.8');
+  const [newSoilMoisture, setNewSoilMoisture] = useState('28.5');
+  const [newSoilRating, setNewSoilRating] = useState<'Good' | 'Optimal' | 'Moderate' | 'Poor'>('Good');
+  const [newSoilNotes, setNewSoilNotes] = useState('');
+
   // Handle successful CSV import (append or replace)
   const handleImportCsvSuccess = (
     newLogs: Array<{ id?: string; season: string; crop: string; target: string; actual: string; status: string; profit: string }>,
@@ -180,6 +279,170 @@ export default function HistoricalYieldLogs({ user, projects, onProjectAdded, on
     };
     fetchLogs();
   }, [user?.id]);
+
+  // Fetch persisted cloud soil records for current user
+  useEffect(() => {
+    if (!user?.id) return;
+    const fetchSoilRecords = async () => {
+      try {
+        const res = await fetch('/api/soil-records', {
+          headers: { 'x-user-id': user.id }
+        });
+        const data = await res.json();
+        if (data.success && data.records && data.records.length > 0) {
+          setSoilRecords(data.records.map((s: any) => ({
+            id: s.id,
+            user_id: s.user_id,
+            fieldName: s.field_name,
+            location: s.location,
+            sampleDate: s.sample_date,
+            crop: s.crop,
+            soilType: s.soil_type,
+            nitrogenKgHa: s.nitrogen_kg_ha,
+            phosphorusKgHa: s.phosphorus_kg_ha,
+            potassiumKgHa: s.potassium_kg_ha,
+            organicCarbonPct: s.organic_carbon_pct,
+            phLevel: s.ph_level,
+            ecDsM: s.ec_ds_m,
+            moisturePct: s.moisture_pct,
+            soilTempC: s.soil_temp_c,
+            healthRating: s.health_rating,
+            notes: s.notes,
+            createdAt: s.created_at
+          })));
+        }
+      } catch (e) {
+        console.error('Failed to fetch user cloud soil records', e);
+      }
+    };
+    fetchSoilRecords();
+  }, [user?.id]);
+
+  // Direct 1-click Export Data function: generates and downloads CSV report of yield & soil records
+  const handleDirectExportData = () => {
+    try {
+      const csvString = generateYieldAndSoilCsv(user, logs, soilRecords, projects, {
+        includeYieldLogs: true,
+        includeSoilRecords: true,
+        includeMetadata: true,
+        format: 'combined_sections',
+        delimiter: ','
+      });
+      const dateStr = new Date().toISOString().split('T')[0];
+      const prefix = user.fullName 
+        ? user.fullName.toLowerCase().replace(/[^a-z0-9]+/g, '_') 
+        : 'claire_agri';
+      const outFilename = `${prefix}_yield_and_soil_report_${dateStr}.csv`;
+
+      downloadCsvBlob(csvString, outFilename);
+      showToast(`Exported CSV report with ${logs.length} yield & ${soilRecords.length} soil records!`, 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to export CSV report.', 'error');
+    }
+  };
+
+  // Handle adding custom soil test record
+  const handleAddSoilRecord = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSoilField || !newSoilDate || !newSoilType) {
+      showToast('Please provide field name, sample date, and soil type.', 'error');
+      return;
+    }
+
+    const formattedSoil: SoilRecord = {
+      id: 'soil_' + Date.now(),
+      user_id: user.id,
+      fieldName: newSoilField,
+      location: user.location || 'Regional Zone',
+      sampleDate: newSoilDate,
+      crop: newSoilCrop,
+      soilType: newSoilType,
+      nitrogenKgHa: parseFloat(newSoilN) || 260,
+      phosphorusKgHa: parseFloat(newSoilP) || 18,
+      potassiumKgHa: parseFloat(newSoilK) || 200,
+      organicCarbonPct: parseFloat(newSoilSoc) || 0.65,
+      phLevel: parseFloat(newSoilPh) || 7.0,
+      ecDsM: 0.60,
+      moisturePct: parseFloat(newSoilMoisture) || 28.0,
+      soilTempC: 21.0,
+      healthRating: newSoilRating,
+      notes: newSoilNotes || 'Field test log entry',
+      createdAt: new Date().toISOString()
+    };
+
+    setIsSyncingSoil(true);
+    try {
+      const res = await fetch('/api/soil-records', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': user.id
+        },
+        body: JSON.stringify({
+          fieldName: formattedSoil.fieldName,
+          location: formattedSoil.location,
+          sampleDate: formattedSoil.sampleDate,
+          crop: formattedSoil.crop,
+          soilType: formattedSoil.soilType,
+          nitrogenKgHa: formattedSoil.nitrogenKgHa,
+          phosphorusKgHa: formattedSoil.phosphorusKgHa,
+          potassiumKgHa: formattedSoil.potassiumKgHa,
+          organicCarbonPct: formattedSoil.organicCarbonPct,
+          phLevel: formattedSoil.phLevel,
+          ecDsM: formattedSoil.ecDsM,
+          moisturePct: formattedSoil.moisturePct,
+          soilTempC: formattedSoil.soilTempC,
+          healthRating: formattedSoil.healthRating,
+          notes: formattedSoil.notes
+        })
+      });
+      const data = await res.json();
+      if (data.success && data.record) {
+        setSoilRecords((prev) => [...prev, {
+          id: data.record.id,
+          user_id: data.record.user_id,
+          fieldName: data.record.field_name,
+          location: data.record.location,
+          sampleDate: data.record.sample_date,
+          crop: data.record.crop,
+          soilType: data.record.soil_type,
+          nitrogenKgHa: data.record.nitrogen_kg_ha,
+          phosphorusKgHa: data.record.phosphorus_kg_ha,
+          potassiumKgHa: data.record.potassium_kg_ha,
+          organicCarbonPct: data.record.organic_carbon_pct,
+          phLevel: data.record.ph_level,
+          ecDsM: data.record.ec_ds_m,
+          moisturePct: data.record.moisture_pct,
+          soilTempC: data.record.soil_temp_c,
+          healthRating: data.record.health_rating,
+          notes: data.record.notes
+        }]);
+      } else {
+        setSoilRecords((prev) => [...prev, formattedSoil]);
+      }
+      setNewSoilNotes('');
+      showToast('Saved soil test record to cloud database!', 'success');
+    } catch (err) {
+      setSoilRecords((prev) => [...prev, formattedSoil]);
+      showToast('Added soil record locally (offline mode).', 'info');
+    } finally {
+      setIsSyncingSoil(false);
+    }
+  };
+
+  const handleDeleteSoilRecord = async (soilId: string) => {
+    try {
+      await fetch(`/api/soil-records/${soilId}`, {
+        method: 'DELETE',
+        headers: { 'x-user-id': user.id }
+      });
+    } catch (e) {
+      console.error(e);
+    }
+    setSoilRecords((prev) => prev.filter((s) => s.id !== soilId));
+    showToast('Deleted soil record.', 'info');
+  };
 
   // Form states for adding custom historical logs
   const [newSeason, setNewSeason] = useState('');
@@ -595,6 +858,28 @@ export default function HistoricalYieldLogs({ user, projects, onProjectAdded, on
         </h3>
         
         <div className="flex items-center gap-2.5">
+          {/* Export Data Button */}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleDirectExportData}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white text-xs font-extrabold shadow-sm shadow-emerald-600/30 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+              title="Quick 1-click CSV download of your historical yield and soil records"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export Data (CSV)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowExportModal(true)}
+              className="p-1.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 hover:text-emerald-700 text-xs font-bold transition-all cursor-pointer shadow-xs"
+              title="Configure CSV format, delimiter, and live preview"
+            >
+              <Sliders className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           {/* New AI Prediction Model Trigger Button */}
           <button
             type="button"
@@ -654,13 +939,48 @@ export default function HistoricalYieldLogs({ user, projects, onProjectAdded, on
         
         {/* Table of Historic Yield Records - 65% width representation in subgroup */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block">Structured Tabular Historical Records</span>
-              <span className="text-[10px] text-slate-400 font-mono font-medium">Auto-calculated model base ({logs.length} periods)</span>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* View Tabs: Yield Records vs Soil Health Records */}
+            <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setActiveRecordTab('yield')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeRecordTab === 'yield'
+                    ? 'bg-white text-slate-800 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <TrendingUp className="w-3.5 h-3.5 text-orange-500" />
+                <span>Crop Yield Logs ({logs.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveRecordTab('soil')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeRecordTab === 'soil'
+                    ? 'bg-white text-slate-800 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <FlaskConical className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Soil Health Records ({soilRecords.length})</span>
+              </button>
             </div>
 
             <div className="flex items-center gap-2">
+              {/* Export Data Button */}
+              <button
+                type="button"
+                onClick={() => setShowExportModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold shadow-sm shadow-emerald-600/20 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                title="Generate and download a CSV report of your yield and soil records"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export Data</span>
+              </button>
+
               {/* Secondary AI Forecast Trigger Button */}
               <button
                 type="button"
@@ -669,17 +989,17 @@ export default function HistoricalYieldLogs({ user, projects, onProjectAdded, on
                 title="Run machine learning model on historical yields"
               >
                 <Brain className="w-3.5 h-3.5 text-purple-600" />
-                <span>AI Prediction Model</span>
+                <span className="hidden sm:inline">AI Model</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setShowCsvImporterModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white text-xs font-bold shadow-sm shadow-sky-500/20 transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-700 text-xs font-bold transition-all cursor-pointer"
                 title="Bulk upload historical yields from spreadsheet"
               >
-                <FileSpreadsheet className="w-3.5 h-3.5" />
-                <span>Bulk Import CSV</span>
+                <FileSpreadsheet className="w-3.5 h-3.5 text-sky-600" />
+                <span className="hidden sm:inline">Import CSV</span>
               </button>
 
               <button
@@ -693,7 +1013,7 @@ export default function HistoricalYieldLogs({ user, projects, onProjectAdded, on
                 title="Toggle inline CSV dropzone"
               >
                 <Upload className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline text-[11px]">{showInlineCsvImporter ? 'Hide Dropzone' : 'Quick Drop'}</span>
+                <span className="hidden sm:inline text-[11px]">{showInlineCsvImporter ? 'Hide Drop' : 'Quick Drop'}</span>
               </button>
             </div>
           </div>
@@ -717,152 +1037,375 @@ export default function HistoricalYieldLogs({ user, projects, onProjectAdded, on
             )}
           </AnimatePresence>
           
-          <div className="bg-white border border-orange-100 rounded-2xl shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-orange-100/60 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                    <th className="py-3 px-4">Season Period</th>
-                    <th className="py-3 px-4">Cultivar</th>
-                    <th className="py-3 px-4 text-center">Expected Target</th>
-                    <th className="py-3 px-4 text-center">Actual Yield</th>
-                    <th className="py-3 px-4 text-center">Crop Status</th>
-                    <th className="py-3 px-4 text-right">Net Profit</th>
-                    <th className="py-3 px-3 text-center w-8">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50 text-xs">
-                  {logs.map((log, idx) => (
-                    <tr key={log.id || idx} className="hover:bg-slate-50/50 text-slate-600 font-medium transition-colors">
-                      <td className="py-3 px-4 font-bold text-slate-800">{log.season}</td>
-                      <td className="py-3 px-4">{log.crop}</td>
-                      <td className="py-3 px-4 text-center font-mono">{log.target}</td>
-                      <td className="py-3 px-4 text-center font-mono text-slate-800 font-semibold">{log.actual}</td>
-                      <td className="py-3 px-4 text-center">
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
-                          log.status === 'Optimal' ? 'bg-emerald-50 text-emerald-600' :
-                          log.status === 'Stable' ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'
-                        }`}>
-                          {log.status}
-                        </span>
-                      </td>
-                      <td className={`py-3 px-4 text-right font-mono font-bold ${log.profit.startsWith('+') ? 'text-emerald-600' : 'text-rose-500'}`}>
-                        {log.profit}
-                      </td>
-                      <td className="py-3 px-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteHistoricalLog(log.id, idx)}
-                          className="p-1 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded transition-colors cursor-pointer"
-                          title="Delete historical log point"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Expandable form to append historic logs directly */}
-          <details className="group bg-slate-50/50 border border-slate-200 rounded-2xl p-4 overflow-hidden transition-all duration-300">
-            <summary className="text-xs font-bold text-slate-600 uppercase tracking-wider cursor-pointer list-none flex items-center justify-between select-none">
-              <div className="flex items-center gap-2">
-                <span className="text-orange-500 text-sm">➕</span>
-                <span>Add Historical Log Point (Update Regression Model)</span>
-              </div>
-              <span className="text-[10px] text-slate-400 group-open:rotate-180 transition-transform font-mono">▼</span>
-            </summary>
-            
-            <form onSubmit={handleAddHistoricalLog} className="pt-4 mt-3 border-t border-slate-200/60 grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Season / Year</label>
-                <input
-                  type="text"
-                  placeholder="e.g. 2025 Summer"
-                  value={newSeason}
-                  onChange={(e) => setNewSeason(e.target.value)}
-                  className="w-full h-8 bg-white border border-slate-200 rounded-lg px-2.5 text-xs text-slate-700 outline-none focus:border-orange-300 transition-colors"
-                  required
-                />
+          {activeRecordTab === 'yield' ? (
+            /* TAB 1: Yield Performance Records Table */
+            <>
+              <div className="bg-white border border-orange-100 rounded-2xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-orange-100/60 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        <th className="py-3 px-4">Season Period</th>
+                        <th className="py-3 px-4">Cultivar</th>
+                        <th className="py-3 px-4 text-center">Expected Target</th>
+                        <th className="py-3 px-4 text-center">Actual Yield</th>
+                        <th className="py-3 px-4 text-center">Crop Status</th>
+                        <th className="py-3 px-4 text-right">Net Profit</th>
+                        <th className="py-3 px-3 text-center w-8">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50 text-xs">
+                      {logs.map((log, idx) => (
+                        <tr key={log.id || idx} className="hover:bg-slate-50/50 text-slate-600 font-medium transition-colors">
+                          <td className="py-3 px-4 font-bold text-slate-800">{log.season}</td>
+                          <td className="py-3 px-4">{log.crop}</td>
+                          <td className="py-3 px-4 text-center font-mono">{log.target}</td>
+                          <td className="py-3 px-4 text-center font-mono text-slate-800 font-semibold">{log.actual}</td>
+                          <td className="py-3 px-4 text-center">
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                              log.status === 'Optimal' ? 'bg-emerald-50 text-emerald-600' :
+                              log.status === 'Stable' ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'
+                            }`}>
+                              {log.status}
+                            </span>
+                          </td>
+                          <td className={`py-3 px-4 text-right font-mono font-bold ${log.profit.startsWith('+') ? 'text-emerald-600' : 'text-rose-500'}`}>
+                            {log.profit}
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteHistoricalLog(log.id, idx)}
+                              className="p-1 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                              title="Delete historical log point"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Cultivar Crop</label>
-                <select
-                  value={newCrop}
-                  onChange={(e) => setNewCrop(e.target.value)}
-                  className="w-full h-8 bg-white border border-slate-200 rounded-lg px-1.5 text-xs text-slate-700 outline-none focus:border-orange-300 transition-colors"
-                >
-                  <option value="Spring Wheat">Spring Wheat</option>
-                  <option value="Roma Tomatoes">Roma Tomatoes</option>
-                  <option value="Sweet Corn">Sweet Corn</option>
-                  <option value="Cabbage clusters">Cabbage clusters</option>
-                  <option value="Soybeans">Soybeans</option>
-                </select>
+              {/* Expandable form to append historic logs directly */}
+              <details className="group bg-slate-50/50 border border-slate-200 rounded-2xl p-4 overflow-hidden transition-all duration-300">
+                <summary className="text-xs font-bold text-slate-600 uppercase tracking-wider cursor-pointer list-none flex items-center justify-between select-none">
+                  <div className="flex items-center gap-2">
+                    <span className="text-orange-500 text-sm">➕</span>
+                    <span>Add Historical Log Point (Update Regression Model)</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 group-open:rotate-180 transition-transform font-mono">▼</span>
+                </summary>
+                
+                <form onSubmit={handleAddHistoricalLog} className="pt-4 mt-3 border-t border-slate-200/60 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Season / Year</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 2025 Summer"
+                      value={newSeason}
+                      onChange={(e) => setNewSeason(e.target.value)}
+                      className="w-full h-8 bg-white border border-slate-200 rounded-lg px-2.5 text-xs text-slate-700 outline-none focus:border-orange-300 transition-colors"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Cultivar Crop</label>
+                    <select
+                      value={newCrop}
+                      onChange={(e) => setNewCrop(e.target.value)}
+                      className="w-full h-8 bg-white border border-slate-200 rounded-lg px-1.5 text-xs text-slate-700 outline-none focus:border-orange-300 transition-colors"
+                    >
+                      <option value="Spring Wheat">Spring Wheat</option>
+                      <option value="Roma Tomatoes">Roma Tomatoes</option>
+                      <option value="Sweet Corn">Sweet Corn</option>
+                      <option value="Cabbage clusters">Cabbage clusters</option>
+                      <option value="Soybeans">Soybeans</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Expected Target (tons/ha)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder="e.g. 10.5"
+                      value={newTarget}
+                      onChange={(e) => setNewTarget(e.target.value)}
+                      className="w-full h-8 bg-white border border-slate-200 rounded-lg px-2.5 text-xs text-slate-700 outline-none focus:border-orange-300 transition-colors"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Actual Yield (tons/ha)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder="e.g. 11.2"
+                      value={newActual}
+                      onChange={(e) => setNewActual(e.target.value)}
+                      className="w-full h-8 bg-white border border-slate-200 rounded-lg px-2.5 text-xs text-slate-700 outline-none focus:border-orange-300 transition-colors"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Crop Status</label>
+                    <select
+                      value={newStatus}
+                      onChange={(e) => setNewStatus(e.target.value)}
+                      className="w-full h-8 bg-white border border-slate-200 rounded-lg px-1.5 text-xs text-slate-700 outline-none focus:border-orange-300 transition-colors"
+                    >
+                      <option value="Optimal">Optimal</option>
+                      <option value="Stable">Stable</option>
+                      <option value="Drought Stress">Drought Stress</option>
+                      <option value="Frost Damage">Frost Damage</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Estimated Profit</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. +$1,200"
+                      value={newProfit}
+                      onChange={(e) => setNewProfit(e.target.value)}
+                      className="w-full h-8 bg-white border border-slate-200 rounded-lg px-2.5 text-xs text-slate-700 outline-none focus:border-orange-300 transition-colors"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="col-span-1 sm:col-span-3 h-8 mt-2 bg-slate-700 hover:bg-slate-800 text-white font-bold text-xs rounded-lg flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                  >
+                    Insert Historical Record to Local Model
+                  </button>
+                </form>
+              </details>
+            </>
+          ) : (
+            /* TAB 2: Soil Health & Laboratory Records Table */
+            <>
+              <div className="bg-white border border-emerald-100 rounded-2xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-emerald-100/60 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        <th className="py-3 px-4">Field / Parcel</th>
+                        <th className="py-3 px-3">Date</th>
+                        <th className="py-3 px-3">Soil Type</th>
+                        <th className="py-3 px-3 text-center">N-P-K (kg/ha)</th>
+                        <th className="py-3 px-3 text-center">SOC (%)</th>
+                        <th className="py-3 px-3 text-center">pH</th>
+                        <th className="py-3 px-3 text-center">Moisture</th>
+                        <th className="py-3 px-3 text-center">Health</th>
+                        <th className="py-3 px-3 text-center w-8">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50 text-xs">
+                      {soilRecords.map((soil) => (
+                        <tr key={soil.id} className="hover:bg-slate-50/50 text-slate-600 font-medium transition-colors">
+                          <td className="py-3 px-4">
+                            <span className="font-bold text-slate-800 block truncate max-w-[140px]">{soil.fieldName}</span>
+                            <span className="text-[10px] text-slate-400 block truncate">{soil.crop || 'Crop'} • {soil.location}</span>
+                          </td>
+                          <td className="py-3 px-3 font-mono text-[11px] text-slate-600 whitespace-nowrap">
+                            {soil.sampleDate}
+                          </td>
+                          <td className="py-3 px-3 text-slate-700 text-xs truncate max-w-[120px]" title={soil.soilType}>
+                            {soil.soilType}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono text-xs">
+                            <span className="text-emerald-700 font-bold">{soil.nitrogenKgHa}</span>-
+                            <span className="text-amber-700 font-bold">{soil.phosphorusKgHa}</span>-
+                            <span className="text-sky-700 font-bold">{soil.potassiumKgHa}</span>
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono font-bold text-slate-800">
+                            {soil.organicCarbonPct.toFixed(2)}%
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono">
+                            {soil.phLevel.toFixed(1)}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono text-slate-700">
+                            {soil.moisturePct.toFixed(1)}%
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                              soil.healthRating === 'Optimal' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
+                              soil.healthRating === 'Good' ? 'bg-sky-100 text-sky-700 border border-sky-200' :
+                              'bg-amber-100 text-amber-700 border border-amber-200'
+                            }`}>
+                              {soil.healthRating}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSoilRecord(soil.id)}
+                              className="p-1 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                              title="Delete soil test record"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Expected Target (tons/ha)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  placeholder="e.g. 10.5"
-                  value={newTarget}
-                  onChange={(e) => setNewTarget(e.target.value)}
-                  className="w-full h-8 bg-white border border-slate-200 rounded-lg px-2.5 text-xs text-slate-700 outline-none focus:border-orange-300 transition-colors"
-                  required
-                />
-              </div>
+              {/* Expandable form to append soil test records */}
+              <details className="group bg-emerald-50/30 border border-emerald-200/70 rounded-2xl p-4 overflow-hidden transition-all duration-300">
+                <summary className="text-xs font-bold text-emerald-800 uppercase tracking-wider cursor-pointer list-none flex items-center justify-between select-none">
+                  <div className="flex items-center gap-2">
+                    <FlaskConical className="w-4 h-4 text-emerald-600" />
+                    <span>Add Soil Laboratory Test Record</span>
+                  </div>
+                  <span className="text-[10px] text-emerald-600 group-open:rotate-180 transition-transform font-mono">▼</span>
+                </summary>
+                
+                <form onSubmit={handleAddSoilRecord} className="pt-4 mt-3 border-t border-emerald-100 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Field / Plot Name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. North Sector A"
+                      value={newSoilField}
+                      onChange={(e) => setNewSoilField(e.target.value)}
+                      className="w-full h-8 bg-white border border-slate-200 rounded-lg px-2.5 text-xs text-slate-700 outline-none focus:border-emerald-400 transition-colors"
+                      required
+                    />
+                  </div>
 
-              <div className="space-y-1">
-                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Actual Yield (tons/ha)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  placeholder="e.g. 11.2"
-                  value={newActual}
-                  onChange={(e) => setNewActual(e.target.value)}
-                  className="w-full h-8 bg-white border border-slate-200 rounded-lg px-2.5 text-xs text-slate-700 outline-none focus:border-orange-300 transition-colors"
-                  required
-                />
-              </div>
+                  <div className="space-y-1">
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Sampling Date</label>
+                    <input
+                      type="date"
+                      value={newSoilDate}
+                      onChange={(e) => setNewSoilDate(e.target.value)}
+                      className="w-full h-8 bg-white border border-slate-200 rounded-lg px-2 text-xs text-slate-700 outline-none focus:border-emerald-400 font-mono transition-colors"
+                      required
+                    />
+                  </div>
 
-              <div className="space-y-1">
-                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Crop Status</label>
-                <select
-                  value={newStatus}
-                  onChange={(e) => setNewStatus(e.target.value)}
-                  className="w-full h-8 bg-white border border-slate-200 rounded-lg px-1.5 text-xs text-slate-700 outline-none focus:border-orange-300 transition-colors"
-                >
-                  <option value="Optimal">Optimal</option>
-                  <option value="Stable">Stable</option>
-                  <option value="Drought Stress">Drought Stress</option>
-                  <option value="Frost Damage">Frost Damage</option>
-                </select>
-              </div>
+                  <div className="space-y-1">
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Soil Texture Type</label>
+                    <select
+                      value={newSoilType}
+                      onChange={(e) => setNewSoilType(e.target.value)}
+                      className="w-full h-8 bg-white border border-slate-200 rounded-lg px-1.5 text-xs text-slate-700 outline-none focus:border-emerald-400 transition-colors"
+                    >
+                      <option value="Deep Alluvial Loam">Deep Alluvial Loam</option>
+                      <option value="Black Regur Soil">Black Regur Soil</option>
+                      <option value="Clay Loam">Clay Loam</option>
+                      <option value="Sandy Clay Loam">Sandy Clay Loam</option>
+                      <option value="Red Laterite Loam">Red Laterite Loam</option>
+                    </select>
+                  </div>
 
-              <div className="space-y-1">
-                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Estimated Profit</label>
-                <input
-                  type="text"
-                  placeholder="e.g. +$1,200"
-                  value={newProfit}
-                  onChange={(e) => setNewProfit(e.target.value)}
-                  className="w-full h-8 bg-white border border-slate-200 rounded-lg px-2.5 text-xs text-slate-700 outline-none focus:border-orange-300 transition-colors"
-                />
-              </div>
+                  <div className="space-y-1">
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Nitrogen N (kg/ha)</label>
+                    <input
+                      type="number"
+                      placeholder="280"
+                      value={newSoilN}
+                      onChange={(e) => setNewSoilN(e.target.value)}
+                      className="w-full h-8 bg-white border border-slate-200 rounded-lg px-2.5 text-xs text-slate-700 outline-none focus:border-emerald-400 transition-colors"
+                      required
+                    />
+                  </div>
 
-              <button
-                type="submit"
-                className="col-span-1 sm:col-span-3 h-8 mt-2 bg-slate-700 hover:bg-slate-800 text-white font-bold text-xs rounded-lg flex items-center justify-center gap-1 cursor-pointer transition-colors"
-              >
-                Insert Historical Record to Local Model
-              </button>
-            </form>
-          </details>
+                  <div className="space-y-1">
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Phosphorus P (kg/ha)</label>
+                    <input
+                      type="number"
+                      placeholder="18"
+                      value={newSoilP}
+                      onChange={(e) => setNewSoilP(e.target.value)}
+                      className="w-full h-8 bg-white border border-slate-200 rounded-lg px-2.5 text-xs text-slate-700 outline-none focus:border-emerald-400 transition-colors"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Potassium K (kg/ha)</label>
+                    <input
+                      type="number"
+                      placeholder="210"
+                      value={newSoilK}
+                      onChange={(e) => setNewSoilK(e.target.value)}
+                      className="w-full h-8 bg-white border border-slate-200 rounded-lg px-2.5 text-xs text-slate-700 outline-none focus:border-emerald-400 transition-colors"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Organic Carbon SOC (%)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.68"
+                      value={newSoilSoc}
+                      onChange={(e) => setNewSoilSoc(e.target.value)}
+                      className="w-full h-8 bg-white border border-slate-200 rounded-lg px-2.5 text-xs text-slate-700 outline-none focus:border-emerald-400 transition-colors"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Soil pH Level</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder="6.8"
+                      value={newSoilPh}
+                      onChange={(e) => setNewSoilPh(e.target.value)}
+                      className="w-full h-8 bg-white border border-slate-200 rounded-lg px-2.5 text-xs text-slate-700 outline-none focus:border-emerald-400 transition-colors"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Moisture (% VWC)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder="28.5"
+                      value={newSoilMoisture}
+                      onChange={(e) => setNewSoilMoisture(e.target.value)}
+                      className="w-full h-8 bg-white border border-slate-200 rounded-lg px-2.5 text-xs text-slate-700 outline-none focus:border-emerald-400 transition-colors"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1 sm:col-span-3">
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Agronomic Field Notes</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Pre-sowing baseline soil test; balanced NPK ratio."
+                      value={newSoilNotes}
+                      onChange={(e) => setNewSoilNotes(e.target.value)}
+                      className="w-full h-8 bg-white border border-slate-200 rounded-lg px-2.5 text-xs text-slate-700 outline-none focus:border-emerald-400 transition-colors"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSyncingSoil}
+                    className="col-span-1 sm:col-span-3 h-8 mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    {isSyncingSoil ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                    <span>Save Soil Test Record to Database</span>
+                  </button>
+                </form>
+              </details>
+            </>
+          )}
         </div>
 
         {/* Database INSERT Form & Project list - 35% width representation in subgroup */}
@@ -1535,6 +2078,18 @@ export default function HistoricalYieldLogs({ user, projects, onProjectAdded, on
               />
             </motion.div>
           </div>
+        )}
+
+        {/* Agricultural Telemetry Data Export Modal (Yield & Soil CSV) */}
+        {showExportModal && (
+          <ExportDataModal
+            user={user}
+            yieldLogs={logs}
+            soilRecords={soilRecords}
+            projects={projects}
+            isOpen={showExportModal}
+            onClose={() => setShowExportModal(false)}
+          />
         )}
       </AnimatePresence>
 

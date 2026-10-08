@@ -333,10 +333,32 @@ interface YieldLog {
   created_at: string;
 }
 
+interface SoilRecordServer {
+  id: string;
+  user_id: string;
+  field_name: string;
+  location: string;
+  sample_date: string;
+  crop?: string;
+  soil_type: string;
+  nitrogen_kg_ha: number;
+  phosphorus_kg_ha: number;
+  potassium_kg_ha: number;
+  organic_carbon_pct: number;
+  ph_level: number;
+  ec_ds_m: number;
+  moisture_pct: number;
+  soil_temp_c: number;
+  health_rating: 'Poor' | 'Moderate' | 'Good' | 'Optimal';
+  notes?: string;
+  created_at: string;
+}
+
 interface Database {
   users: Record<string, UserProfile>;
   projects: Project[];
   yield_logs: YieldLog[];
+  soil_records: SoilRecordServer[];
 }
 
 // Upgraded High-Security Password Hashing (100,000 rounds PBKDF2 with SHA-512)
@@ -389,7 +411,7 @@ function sanitizeUser(user: UserProfile) {
 const weatherCache: Record<string, { timestamp: number; data: any }> = {};
 const CACHE_TTL_MS = 3600 * 1000;
 
-let inMemoryDb: Database = { users: {}, projects: [], yield_logs: [] };
+let inMemoryDb: Database = { users: {}, projects: [], yield_logs: [], soil_records: [] };
 
 function getDb(): Database {
   try {
@@ -406,6 +428,7 @@ function getDb(): Database {
     if (!parsed.users) parsed.users = {};
     if (!parsed.projects) parsed.projects = [];
     if (!parsed.yield_logs) parsed.yield_logs = [];
+    if (!parsed.soil_records) parsed.soil_records = [];
     inMemoryDb = parsed;
     return inMemoryDb;
   } catch (error) {
@@ -449,6 +472,11 @@ function executeSql(query: string, params: any[] = []): any {
       const res = (db.yield_logs || []).filter(l => l.user_id === userId);
       return res.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     }
+    if (q.includes('FROM SOIL_RECORDS WHERE USER_ID = ?') || q.includes('FROM SOIL_RECORDS WHERE USER_ID=?')) {
+      const userId = params[0];
+      const res = (db.soil_records || []).filter(s => s.user_id === userId);
+      return res.sort((a, b) => new Date(b.created_at || b.sample_date).getTime() - new Date(a.created_at || a.sample_date).getTime());
+    }
   }
 
   if (q.startsWith('DELETE FROM USERS')) {
@@ -457,6 +485,7 @@ function executeSql(query: string, params: any[] = []): any {
       delete db.users[id];
       db.projects = db.projects.filter(p => p.user_id !== id);
       db.yield_logs = (db.yield_logs || []).filter(l => l.user_id !== id);
+      db.soil_records = (db.soil_records || []).filter(s => s.user_id !== id);
       saveDb(db);
       return { changes: 1 };
     }
@@ -477,6 +506,14 @@ function executeSql(query: string, params: any[] = []): any {
     db.yield_logs = (db.yield_logs || []).filter(l => l.id !== id);
     saveDb(db);
     return { changes: initialLength - db.yield_logs.length };
+  }
+
+  if (q.startsWith('DELETE FROM SOIL_RECORDS')) {
+    const id = params[0];
+    const initialLength = (db.soil_records || []).length;
+    db.soil_records = (db.soil_records || []).filter(s => s.id !== id);
+    saveDb(db);
+    return { changes: initialLength - db.soil_records.length };
   }
 
   return null;
@@ -827,6 +864,304 @@ app.delete('/api/yield-logs', (req, res) => {
   saveDb(db);
 
   return res.json({ success: true, message: 'All yield logs cleared for user.' });
+});
+
+// 7.3.1 Soil Records: GET User's Soil Records (with auto-seeding if empty)
+app.get('/api/soil-records', (req, res) => {
+  const userId = req.headers['x-user-id'] as string;
+  if (!userId || typeof userId !== 'string') return res.status(401).json({ error: 'Unauthorized.' });
+
+  const db = getDb();
+  if (!Array.isArray(db.soil_records)) {
+    db.soil_records = [];
+  }
+
+  let userRecords = db.soil_records.filter(s => s.user_id === userId);
+
+  // If new user or no records exist yet, seed initial realistic field soil test data
+  if (userRecords.length === 0) {
+    const user = db.users[userId];
+    const userLocation = user?.location || 'Central Agricultural District';
+    const userProjects = (db.projects || []).filter(p => p.user_id === userId);
+    const p1Name = userProjects[0]?.name || 'North Sector A';
+    const p2Name = userProjects[1]?.name || 'Central Parcel B';
+
+    const defaultSoilRecords: SoilRecordServer[] = [
+      {
+        id: 'soil_1_' + Date.now(),
+        user_id: userId,
+        field_name: p1Name,
+        location: userLocation,
+        sample_date: '2024-03-15',
+        crop: userProjects[0]?.crop || 'Spring Wheat',
+        soil_type: 'Deep Alluvial Loam',
+        nitrogen_kg_ha: 280,
+        phosphorus_kg_ha: 18,
+        potassium_kg_ha: 210,
+        organic_carbon_pct: 0.68,
+        ph_level: 6.8,
+        ec_ds_m: 0.58,
+        moisture_pct: 28.5,
+        soil_temp_c: 19.2,
+        health_rating: 'Good',
+        notes: 'Pre-sowing baseline soil test; balanced NPK ratio and optimal pore structure.',
+        created_at: new Date('2024-03-15T08:00:00Z').toISOString()
+      },
+      {
+        id: 'soil_2_' + Date.now(),
+        user_id: userId,
+        field_name: p2Name,
+        location: userLocation,
+        sample_date: '2024-07-20',
+        crop: 'Roma Tomatoes',
+        soil_type: 'Black Regur Soil',
+        nitrogen_kg_ha: 310,
+        phosphorus_kg_ha: 24,
+        potassium_kg_ha: 245,
+        organic_carbon_pct: 0.74,
+        ph_level: 7.2,
+        ec_ds_m: 0.62,
+        moisture_pct: 33.1,
+        soil_temp_c: 23.5,
+        health_rating: 'Optimal',
+        notes: 'Mid-season fertigation check; rich humus content and thriving beneficial fungi.',
+        created_at: new Date('2024-07-20T08:00:00Z').toISOString()
+      },
+      {
+        id: 'soil_3_' + Date.now(),
+        user_id: userId,
+        field_name: 'South Slope Terrace',
+        location: userLocation,
+        sample_date: '2024-10-10',
+        crop: 'Sweet Corn',
+        soil_type: 'Clay Loam',
+        nitrogen_kg_ha: 220,
+        phosphorus_kg_ha: 12,
+        potassium_kg_ha: 175,
+        organic_carbon_pct: 0.51,
+        ph_level: 7.6,
+        ec_ds_m: 0.85,
+        moisture_pct: 19.8,
+        soil_temp_c: 24.1,
+        health_rating: 'Moderate',
+        notes: 'Post-drought survey; recommends humic acid compost amendment to boost CEC.',
+        created_at: new Date('2024-10-10T08:00:00Z').toISOString()
+      },
+      {
+        id: 'soil_4_' + Date.now(),
+        user_id: userId,
+        field_name: 'East Lowland Basin',
+        location: userLocation,
+        sample_date: '2025-01-18',
+        crop: 'Cabbage clusters',
+        soil_type: 'Sandy Clay Loam',
+        nitrogen_kg_ha: 295,
+        phosphorus_kg_ha: 21,
+        potassium_kg_ha: 230,
+        organic_carbon_pct: 0.62,
+        ph_level: 6.5,
+        ec_ds_m: 0.52,
+        moisture_pct: 31.0,
+        soil_temp_c: 17.8,
+        health_rating: 'Good',
+        notes: 'Winter moisture retention high; vigorous earthworm channel activity detected.',
+        created_at: new Date('2025-01-18T08:00:00Z').toISOString()
+      }
+    ];
+
+    db.soil_records.push(...defaultSoilRecords);
+    saveDb(db);
+    userRecords = defaultSoilRecords;
+  }
+
+  return res.json({ success: true, records: userRecords });
+});
+
+// 7.3.2 Soil Records: POST Add Custom Soil Test Record
+app.post('/api/soil-records', (req, res) => {
+  const userId = req.headers['x-user-id'] as string;
+  if (!userId || typeof userId !== 'string') return res.status(401).json({ error: 'Unauthorized.' });
+
+  const {
+    fieldName,
+    location,
+    sampleDate,
+    crop,
+    soilType,
+    nitrogenKgHa,
+    phosphorusKgHa,
+    potassiumKgHa,
+    organicCarbonPct,
+    phLevel,
+    ecDsM,
+    moisturePct,
+    soilTempC,
+    healthRating,
+    notes
+  } = req.body;
+
+  if (!fieldName || !sampleDate || !soilType) {
+    return res.status(400).json({ error: 'Field name, sample date, and soil type are required.' });
+  }
+
+  const db = getDb();
+  if (!Array.isArray(db.soil_records)) {
+    db.soil_records = [];
+  }
+
+  const newRecord: SoilRecordServer = {
+    id: 'soil_' + Math.floor(Math.random() * 100000) + '_' + Date.now(),
+    user_id: userId,
+    field_name: String(fieldName).trim().slice(0, 100),
+    location: location ? String(location).trim().slice(0, 100) : 'Field Plot',
+    sample_date: String(sampleDate).trim().slice(0, 20),
+    crop: crop ? String(crop).trim().slice(0, 60) : 'General Crop',
+    soil_type: String(soilType).trim().slice(0, 60),
+    nitrogen_kg_ha: Number(nitrogenKgHa) || 250,
+    phosphorus_kg_ha: Number(phosphorusKgHa) || 16,
+    potassium_kg_ha: Number(potassiumKgHa) || 200,
+    organic_carbon_pct: Number(organicCarbonPct) || 0.60,
+    ph_level: Number(phLevel) || 7.0,
+    ec_ds_m: Number(ecDsM) || 0.60,
+    moisture_pct: Number(moisturePct) || 28.0,
+    soil_temp_c: Number(soilTempC) || 21.0,
+    health_rating: healthRating || 'Good',
+    notes: notes ? String(notes).trim().slice(0, 255) : '',
+    created_at: new Date().toISOString()
+  };
+
+  db.soil_records.push(newRecord);
+  saveDb(db);
+
+  return res.json({ success: true, record: newRecord });
+});
+
+// 7.3.3 Soil Records: DELETE single record
+app.delete('/api/soil-records/:id', (req, res) => {
+  const userId = req.headers['x-user-id'] as string;
+  if (!userId || typeof userId !== 'string') return res.status(401).json({ error: 'Unauthorized.' });
+
+  const { id } = req.params;
+  const db = getDb();
+  if (!Array.isArray(db.soil_records)) {
+    db.soil_records = [];
+  }
+
+  const initialCount = db.soil_records.length;
+  db.soil_records = db.soil_records.filter(s => !(s.id === id && s.user_id === userId));
+  saveDb(db);
+
+  return res.json({ success: true, removed: initialCount - db.soil_records.length });
+});
+
+// 7.3.4 Agricultural Telemetry CSV Export Endpoint (Yield + Soil Records)
+app.get('/api/export/yield-soil-csv', (req, res) => {
+  const userId = (req.headers['x-user-id'] as string) || (req.query.userId as string);
+  if (!userId || typeof userId !== 'string') {
+    return res.status(401).send('Unauthorized. User ID required.');
+  }
+
+  const db = getDb();
+  const user = db.users[userId];
+  const userLogs = (db.yield_logs || []).filter(l => l.user_id === userId);
+  const userSoil = (db.soil_records || []).filter(s => s.user_id === userId);
+
+  const escapeCsv = (val: any): string => {
+    if (val === undefined || val === null) return '""';
+    const s = String(val).replace(/"/g, '""');
+    return `"${s}"`;
+  };
+
+  const csvLines: string[] = [];
+  const exportDate = new Date().toISOString();
+
+  // Header & Farmer Profile
+  csvLines.push(escapeCsv('=== CLAIRE.AI AGRICULTURAL REPORT: YIELD & SOIL TELEMETRY ==='));
+  csvLines.push(`${escapeCsv('Report Generated At')},${escapeCsv(exportDate)}`);
+  csvLines.push(`${escapeCsv('Farmer Name')},${escapeCsv(user?.fullName || 'Agricultural Operator')}`);
+  csvLines.push(`${escapeCsv('Farm Enterprise')},${escapeCsv(user?.farmName || 'Field Station')}`);
+  csvLines.push(`${escapeCsv('Primary Location')},${escapeCsv(user?.location || 'Regional Sector')}`);
+  csvLines.push(`${escapeCsv('User Email')},${escapeCsv(user?.email || 'N/A')}`);
+  csvLines.push(`${escapeCsv('Total Yield Records')},${escapeCsv(userLogs.length)}`);
+  csvLines.push(`${escapeCsv('Total Soil Test Records')},${escapeCsv(userSoil.length)}`);
+  csvLines.push('');
+
+  // Section 1: Historical Yield Logs
+  csvLines.push(escapeCsv('--- SECTION 1: HISTORICAL CROP YIELD PERFORMANCE RECORDS ---'));
+  csvLines.push([
+    escapeCsv('Record ID'),
+    escapeCsv('Season Period'),
+    escapeCsv('Cultivar / Crop'),
+    escapeCsv('Expected Target (tons/ha)'),
+    escapeCsv('Actual Yield (tons/ha)'),
+    escapeCsv('Performance Status'),
+    escapeCsv('Net Profit Margin'),
+    escapeCsv('Timestamp')
+  ].join(','));
+
+  userLogs.forEach(l => {
+    csvLines.push([
+      escapeCsv(l.id),
+      escapeCsv(l.season),
+      escapeCsv(l.crop),
+      escapeCsv(l.target),
+      escapeCsv(l.actual),
+      escapeCsv(l.status),
+      escapeCsv(l.profit),
+      escapeCsv(l.created_at || '')
+    ].join(','));
+  });
+
+  csvLines.push('');
+
+  // Section 2: Soil Records
+  csvLines.push(escapeCsv('--- SECTION 2: SOIL NUTRIENT, LAB & TELEMETRY RECORDS ---'));
+  csvLines.push([
+    escapeCsv('Sample ID'),
+    escapeCsv('Field / Parcel Name'),
+    escapeCsv('Location'),
+    escapeCsv('Sampling Date'),
+    escapeCsv('Associated Crop'),
+    escapeCsv('Soil Texture / Type'),
+    escapeCsv('Nitrogen N (kg/ha)'),
+    escapeCsv('Phosphorus P (kg/ha)'),
+    escapeCsv('Potassium K (kg/ha)'),
+    escapeCsv('Soil Organic Carbon (%)'),
+    escapeCsv('Soil pH'),
+    escapeCsv('EC (dS/m)'),
+    escapeCsv('Topsoil Moisture (% VWC)'),
+    escapeCsv('Soil Temp (°C)'),
+    escapeCsv('Health Rating'),
+    escapeCsv('Agronomic Notes')
+  ].join(','));
+
+  userSoil.forEach(s => {
+    csvLines.push([
+      escapeCsv(s.id),
+      escapeCsv(s.field_name),
+      escapeCsv(s.location),
+      escapeCsv(s.sample_date),
+      escapeCsv(s.crop || 'General'),
+      escapeCsv(s.soil_type),
+      escapeCsv(s.nitrogen_kg_ha),
+      escapeCsv(s.phosphorus_kg_ha),
+      escapeCsv(s.potassium_kg_ha),
+      escapeCsv(s.organic_carbon_pct),
+      escapeCsv(s.ph_level),
+      escapeCsv(s.ec_ds_m),
+      escapeCsv(s.moisture_pct),
+      escapeCsv(s.soil_temp_c),
+      escapeCsv(s.health_rating),
+      escapeCsv(s.notes || '')
+    ].join(','));
+  });
+
+  const csvContent = '\uFEFF' + csvLines.join('\r\n');
+  const safeFilename = `claire_yield_and_soil_records_${exportDate.split('T')[0]}.csv`;
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+  return res.status(200).send(csvContent);
 });
 
 // 7.4 Yield Logs: POST AI Forecast Projection for Next 3 Harvest Cycles

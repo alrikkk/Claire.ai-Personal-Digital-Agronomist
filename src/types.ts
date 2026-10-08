@@ -25,6 +25,35 @@ export interface YieldLogItem {
   created_at?: string;
 }
 
+export interface SoilRecord {
+  id: string;
+  user_id: string;
+  fieldName: string;
+  location: string;
+  sampleDate: string;
+  crop?: string;
+  soilType: string;
+  nitrogenKgHa: number;
+  phosphorusKgHa: number;
+  potassiumKgHa: number;
+  organicCarbonPct: number;
+  phLevel: number;
+  ecDsM: number;
+  moisturePct: number;
+  soilTempC: number;
+  healthRating: 'Poor' | 'Moderate' | 'Good' | 'Optimal';
+  notes?: string;
+  createdAt?: string;
+}
+
+export interface ExportDataOptions {
+  includeYieldLogs: boolean;
+  includeSoilRecords: boolean;
+  includeMetadata: boolean;
+  format: 'combined_sections' | 'combined_matrix' | 'yield_only' | 'soil_only';
+  delimiter: ',' | ';';
+}
+
 export interface Project {
   id: string;
   user_id: string;
